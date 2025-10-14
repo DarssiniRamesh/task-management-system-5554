@@ -1,10 +1,17 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import logging
 
 from src.api.routers.auth import router as auth_router
 from src.api.routers.tasks import router as tasks_router
 from src.core.config import get_settings
 from src.db.session import Base, init_engine
+
+# Configure module-level logger
+logger = logging.getLogger("to_do_backend.api.main")
+if not logger.handlers:
+    # Basic configuration; in production, prefer structured JSON logging via a central config
+    logging.basicConfig(level=logging.INFO)
 
 # Initialize FastAPI app with metadata and OpenAPI tags
 app = FastAPI(
@@ -18,10 +25,10 @@ app = FastAPI(
     ],
 )
 
-# CORS configuration using environment settings
+# CORS configuration using environment settings with sane defaults
 settings = get_settings()
-allow_origins = [o.strip() for o in settings.cors_allow_origins.split(",") if o.strip()]
-# If no origins are provided, default to "*" for local development convenience.
+cors_value = settings.cors_allow_origins or "*"
+allow_origins = [o.strip() for o in str(cors_value).split(",") if o and o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins or ["*"],
@@ -39,10 +46,19 @@ def on_startup():
     This function:
     - Initializes the SQLAlchemy engine and session factory.
     - Creates all tables if they do not exist (safe for local dev with SQLite).
+
+    Errors are logged to aid diagnostics without exposing sensitive details.
     """
-    engine = init_engine()
-    # Create tables if not present; for dev convenience. In production, use migrations.
-    Base.metadata.create_all(bind=engine)
+    try:
+        engine = init_engine()
+        # Create tables if not present; for dev convenience. In production, use migrations.
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database initialized and tables ensured.")
+    except Exception as exc:
+        # Log a succinct message; avoid dumping secrets or connection strings
+        logger.error("Failed to initialize database engine or create tables: %s", exc)
+        # Re-raise to let the orchestrator surface a failing container health
+        raise
 
 
 @app.get("/", tags=["Health"], summary="Health Check")
