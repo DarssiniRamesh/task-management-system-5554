@@ -6,6 +6,7 @@ Purpose: Authentication routes for user registration, login, and profile retriev
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+import logging
 from sqlalchemy.orm import Session
 
 from src.db.session import get_db
@@ -15,6 +16,7 @@ from src.db.repositories import DuplicateEmailError, RepositoryError
 from src.dependencies.auth import get_current_user_id, get_auth_service
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
+logger = logging.getLogger("to_do_backend.api.routers.auth")
 
 
 @router.post(
@@ -57,16 +59,24 @@ def register_user(
         # 409 Conflict for duplicate emails (unique constraint violation)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except RepositoryError as exc:
-        # Any repository-layer controlled error should be surfaced as a 400 to avoid 500s.
-        detail = str(exc) or "Invalid input."
+        # Controlled repository-layer error; surface details as provided.
+        detail = str(exc) or "Repository error."
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
     except ValueError as exc:
         # Map service-layer policy violations and hashing/processing errors to 400 with precise detail.
-        detail = str(exc) or POLICY_MESSAGE
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
-    except Exception as exc:
-        # Final safety net to prevent 500s on expected flow; redact details
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid input.") from exc
+        # Ensure we always include the minimum length message when applicable.
+        msg = str(exc).strip() or POLICY_MESSAGE
+        if "8" not in msg and "at least" not in msg.lower():
+            # Prefer consistent policy text for password-related ValueErrors
+            msg = POLICY_MESSAGE
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg) from exc
+    except HTTPException:
+        # Let already-formed HTTP exceptions bubble up unchanged.
+        raise
+    except Exception:
+        # Unexpected error: log and re-raise to avoid masking root cause as a generic 400.
+        logger.exception("Unexpected error during user registration for email=%s", payload.email)
+        raise
 
 
 @router.post(

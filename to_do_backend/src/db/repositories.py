@@ -50,7 +50,7 @@ class UserRepository:
         email = (email or "").strip().lower()
         if not email:
             raise ValueError("Email must be provided.")
-        # Service layer enforces normalization and byte-length policy (8–72 inclusive).
+        # Service layer enforces minimum length policy (>= 8 characters).
         # Here we only guard against an empty string as a final safety check.
         if not isinstance(password, str) or password == "":
             raise ValueError("Password must be provided.")

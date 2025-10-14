@@ -105,7 +105,7 @@ class AuthService:
 
         Raises:
             DuplicateEmailError: If the email is already registered.
-            ValueError: On invalid input (including >72-byte passwords).
+            ValueError: On invalid input (e.g., password shorter than 8 characters or empty).
         """
         # Normalize inputs
         email = (email or "").strip()
