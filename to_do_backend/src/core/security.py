@@ -4,14 +4,15 @@ Purpose: Security utilities including password hashing and verification with bcr
 
 Notes:
 - This module intentionally avoids logging sensitive data.
-- We deliberately surface passlib/bcrypt issues as ValueError to upstream callers so routers can
-  translate to HTTP 400 when appropriate without leaking internal details.
+- Only expected passlib/bcrypt exceptions are surfaced in a controlled way.
+- CryptContext is configured with the 'bcrypt' scheme specifically (not bcrypt_sha256).
 """
 
 from passlib.context import CryptContext
-from passlib.exc import ExpectedStringError, InvalidHashError
+from passlib.exc import ExpectedStringError, InvalidHashError, UnknownHashError
 
 # Configure passlib CryptContext for bcrypt hashing.
+# Using bcrypt ensures 72-byte limit behavior is explicit and consistent.
 _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
@@ -56,6 +57,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
     try:
         return _pwd_context.verify(plain_password, hashed_password)
-    except (InvalidHashError, ExpectedStringError, ValueError):
-        # Treat invalid hash formats or bad input as non-match rather than raising
+    except (InvalidHashError, UnknownHashError, ExpectedStringError, ValueError):
+        # Treat invalid/unknown hash formats or bad input as non-match rather than raising
         return False

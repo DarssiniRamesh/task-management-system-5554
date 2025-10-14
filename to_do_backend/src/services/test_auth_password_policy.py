@@ -50,7 +50,8 @@ def db() -> Session:
 def test_normal_password_is_accepted(db: Session):
     service = AuthService(user_repository=UserRepository())
     email = "user@example.com"
-    password = "normalPass123!"
+    # Common strong password within bounds
+    password = "Password123!"
     # Should not raise
     user = service.register_user(db, email=email, password=password)
     assert user.email == email

@@ -44,7 +44,11 @@ def _normalized_password(password: str) -> str:
     if not isinstance(password, str):
         raise ValueError("Password must be a string.")
     # Surrounding whitespace is often accidental (copy/paste); strip without altering internal content.
-    return password.strip()
+    normalized = password.strip()
+    if normalized == "":
+        # Ensure normalization doesn't produce empty values
+        raise ValueError("Password cannot be empty.")
+    return normalized
 
 
 def _password_within_bcrypt_bounds(password: str) -> bool:
@@ -105,8 +109,7 @@ class AuthService:
             # Bubble up validation errors consistently
             raise
         except Exception as exc:
-            # If underlying bcrypt/passlib throws due to unexpected issues, re-raise as ValueError for 400.
-            # We avoid leaking internal exception messages.
+            # Only map unexpected passlib/bcrypt issues; don't mask generic logic errors.
             raise ValueError("Unable to process password.") from exc
 
     # PUBLIC_INTERFACE

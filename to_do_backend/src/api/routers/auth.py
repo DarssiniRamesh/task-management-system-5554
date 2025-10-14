@@ -63,7 +63,7 @@ def register_user(
     "/login",
     response_model=TokenResponse,
     summary="Login",
-    description="Validates user credentials and returns a JWT access token (HS256).",
+    description="Validates user credentials and returns a JWT access token (HS256). Password must be 8–72 UTF-8 bytes.",
     responses={
         200: {"description": "Login successful."},
         400: {"description": "Validation error."},
