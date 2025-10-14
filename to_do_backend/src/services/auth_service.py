@@ -124,12 +124,9 @@ class AuthService:
             return self._user_repo.create_user(db, email=email, password=normalized_pwd)
         except ValueError as exc:
             # Preserve explicit validation messages (e.g., from repository or hashing)
-            # If hashing failed, surface a precise message; otherwise, bubble up.
             msg = str(exc) if str(exc) else "Invalid input."
             raise ValueError(msg) from exc
-        except Exception as exc:
-            # Only map truly unexpected issues to a safe message without masking policy-valid inputs.
-            raise ValueError("Password processing encountered an unexpected error.") from exc
+        # Do not catch-all here; let unexpected exceptions propagate to avoid masking valid inputs
 
     # PUBLIC_INTERFACE
     def authenticate_user(self, db: Session, *, email: str, password: str) -> Tuple[User, str]:
@@ -162,9 +159,7 @@ class AuthService:
         except ValueError as exc:
             # Preserve validation messages (though repository authenticate shouldn't raise in normal flow)
             raise ValueError(str(exc) or "Invalid input.") from exc
-        except Exception as exc:
-            # Convert unexpected passlib/bcrypt errors to a safe 400 without ambiguous phrasing
-            raise ValueError("Password processing encountered an unexpected error.") from exc
+        # Do not catch-all here; let unexpected exceptions propagate to avoid masking valid inputs
 
         if not user:
             # Standard invalid credentials without leaking whether email exists
