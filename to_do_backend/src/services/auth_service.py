@@ -19,6 +19,9 @@ from src.db.repositories import UserRepository
 from src.schemas.auth import TokenPayload
 from src.db.models import User
 
+# Single source of truth for password policy error text to ensure consistency across layers
+POLICY_MESSAGE = "Password must be between 8 and 72 UTF-8 bytes (inclusive)."
+
 
 class AuthServiceError(Exception):
     """Base class for authentication service errors."""
@@ -117,7 +120,7 @@ class AuthService:
         # Defensive check: enforce bcrypt byte-length policy (8–72 bytes).
         if not password_within_bcrypt_bounds(normalized_pwd):
             # Raise a ValueError so routers can consistently translate to HTTP 400
-            raise ValueError("Password must be between 8 and 72 UTF-8 bytes (inclusive).")
+            raise ValueError(POLICY_MESSAGE)
 
         # Delegate hashing to repository; ensure repository does not mutate/truncate password.
         try:
@@ -152,7 +155,7 @@ class AuthService:
         # Defensive check before verifying against bcrypt hash to avoid implicit truncation.
         if not password_within_bcrypt_bounds(normalized_pwd):
             # Service-layer 400 via router; keep message generic and consistent.
-            raise ValueError("Password must be between 8 and 72 UTF-8 bytes (inclusive).")
+            raise ValueError(POLICY_MESSAGE)
 
         try:
             user = self._user_repo.authenticate(db, email=email, password=normalized_pwd)

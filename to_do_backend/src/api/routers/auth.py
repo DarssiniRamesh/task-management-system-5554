@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from src.db.session import get_db
 from src.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
-from src.services.auth_service import AuthService, InvalidCredentialsError
+from src.services.auth_service import AuthService, InvalidCredentialsError, POLICY_MESSAGE
 from src.db.repositories import DuplicateEmailError
 from src.dependencies.auth import get_current_user_id, get_auth_service
 
@@ -57,7 +57,7 @@ def register_user(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
         # Map service-layer policy violations and hashing/processing errors to 400 with precise detail.
-        detail = str(exc) or "Password must be between 8 and 72 UTF-8 bytes (inclusive)."
+        detail = str(exc) or POLICY_MESSAGE
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
 
 
@@ -99,7 +99,7 @@ def login(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
     except ValueError as exc:
         # Enforce consistent 400 behavior (service enforces 8–72 UTF-8 byte policy)
-        detail = str(exc) or "Password must be between 8 and 72 UTF-8 bytes (inclusive)."
+        detail = str(exc) or POLICY_MESSAGE
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
 
 
