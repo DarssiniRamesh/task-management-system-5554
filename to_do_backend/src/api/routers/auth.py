@@ -54,6 +54,7 @@ def register_user(
         user = auth_service.register_user(db, email=payload.email, password=payload.password)
         return UserResponse.model_validate(user)
     except DuplicateEmailError as exc:
+        # 409 Conflict for duplicate emails (unique constraint violation)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except RepositoryError as exc:
         # Any repository-layer controlled error should be surfaced as a 400 to avoid 500s.
@@ -63,6 +64,9 @@ def register_user(
         # Map service-layer policy violations and hashing/processing errors to 400 with precise detail.
         detail = str(exc) or POLICY_MESSAGE
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
+    except Exception as exc:
+        # Final safety net to prevent 500s on expected flow; redact details
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid input.") from exc
 
 
 @router.post(
@@ -100,6 +104,7 @@ def login(
         _, token = auth_service.authenticate_user(db, email=payload.email, password=payload.password)
         return TokenResponse(access_token=token)
     except InvalidCredentialsError as exc:
+        # 401 Unauthorized for bad credentials without leaking specifics
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
     except RepositoryError as exc:
         # Repository errors in login are treated as invalid inputs (do not leak internals)
@@ -108,6 +113,9 @@ def login(
         # Enforce consistent 400 behavior (service enforces >=8 characters policy)
         detail = str(exc) or POLICY_MESSAGE
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
+    except Exception as exc:
+        # Final safety net to avoid 500 for predictable flow issues
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid input.") from exc
 
 
 @router.get(
