@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.api.routers.auth import router as auth_router
+from src.api.routers.tasks import router as tasks_router
 from src.core.config import get_settings
 from src.db.session import Base, init_engine
 
@@ -51,3 +53,8 @@ def health_check():
         A simple JSON payload confirming service health.
     """
     return {"message": "Healthy"}
+
+
+# Include routers
+app.include_router(auth_router)
+app.include_router(tasks_router)
