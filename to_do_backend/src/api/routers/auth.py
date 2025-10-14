@@ -22,7 +22,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new user",
-    description="Creates a user with a hashed password. Returns basic user information.",
+    description="Creates a user with a hashed password. Returns basic user information. Password must be at least 8 characters; no upper byte-length limit.",
     responses={
         201: {"description": "User created."},
         400: {"description": "Validation error."},
@@ -65,7 +65,7 @@ def register_user(
     "/login",
     response_model=TokenResponse,
     summary="Login",
-    description="Validates user credentials and returns a JWT access token (HS256). Password must be 8–72 UTF-8 bytes (inclusive).",
+    description="Validates user credentials and returns a JWT access token (HS256). Password must be at least 8 characters.",
     responses={
         200: {"description": "Login successful."},
         400: {"description": "Validation error."},

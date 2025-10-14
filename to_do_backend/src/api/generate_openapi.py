@@ -3,7 +3,7 @@ import os
 
 from src.api.main import app
 
-# Get the OpenAPI schema (reflects current Pydantic models/validators)
+# Get the OpenAPI schema (reflects current Pydantic models/validators and route descriptions)
 openapi_schema = app.openapi()
 
 # Write to file

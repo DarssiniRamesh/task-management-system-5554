@@ -2,10 +2,11 @@
 Module: services.auth_service
 Purpose: Business logic for authentication including registration, login, and JWT handling.
 Security: Uses HS256 JWT with secret from environment settings. Never logs secrets or raw passwords.
-Enhancement: Enforce bcrypt UTF-8 byte-length constraints (8–72 bytes) defensively in service layer
-             to prevent hashing/verification with invalid lengths.
-Fix: Normalize inputs (strip surrounding whitespace), validate strictly by UTF-8 byte length (8–72),
-     avoid truncation, and convert passlib/bcrypt exceptions into safe 400s only when truly exceeded.
+
+Change:
+- Remove enforcement of bcrypt's 72-byte limit. We now allow arbitrary-length passwords safely by
+  pre-hashing with SHA-256 before bcrypt (see core.security). Maintain a minimum length of 8 characters.
+- Update error messages and behavior to reject only passwords shorter than 8 characters or empty.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -20,7 +21,7 @@ from src.schemas.auth import TokenPayload
 from src.db.models import User
 
 # Single source of truth for password policy error text to ensure consistency across layers
-POLICY_MESSAGE = "Password must be between 8 and 72 UTF-8 bytes (inclusive)."
+POLICY_MESSAGE = "Password must be at least 8 characters."
 
 
 class AuthServiceError(Exception):
@@ -63,26 +64,19 @@ def normalized_password(password: str) -> str:
     return normalized
 
 
-# PUBLIC_INTERFACE
-def password_within_bcrypt_bounds(password: str) -> bool:
+def _password_meets_minimum(password: str) -> bool:
     """
-    Check if a password is within the inclusive bcrypt bounds of 8–72 UTF-8 bytes.
+    Check if a password meets the minimum length requirement.
 
     Args:
         password: Candidate password string.
 
     Returns:
-        True if 8 <= len(password.encode('utf-8')) <= 72, else False.
+        True if length is >= 8 characters; else False.
     """
-    if not isinstance(password, str) or password == "":
+    if not isinstance(password, str):
         return False
-    try:
-        byte_len = len(password.encode("utf-8"))
-        # Inclusive boundaries per bcrypt policy
-        return 8 <= byte_len <= 72
-    except Exception:
-        # If encoding somehow fails, treat as invalid input.
-        return False
+    return len(password) >= 8
 
 
 class AuthService:
@@ -117,9 +111,8 @@ class AuthService:
         email = (email or "").strip()
         normalized_pwd = normalized_password(password)
 
-        # Defensive check: enforce bcrypt byte-length policy (8–72 bytes).
-        if not password_within_bcrypt_bounds(normalized_pwd):
-            # Raise a ValueError so routers can consistently translate to HTTP 400
+        # Enforce only minimum length; no 72-byte cap due to SHA-256 pre-hashing.
+        if not _password_meets_minimum(normalized_pwd):
             raise ValueError(POLICY_MESSAGE)
 
         # Delegate hashing to repository; ensure repository does not mutate/truncate password.
@@ -152,9 +145,8 @@ class AuthService:
         email = (email or "").strip()
         normalized_pwd = normalized_password(password)
 
-        # Defensive check before verifying against bcrypt hash to avoid implicit truncation.
-        if not password_within_bcrypt_bounds(normalized_pwd):
-            # Service-layer 400 via router; keep message generic and consistent.
+        # Enforce only minimum length for login as well.
+        if not _password_meets_minimum(normalized_pwd):
             raise ValueError(POLICY_MESSAGE)
 
         try:

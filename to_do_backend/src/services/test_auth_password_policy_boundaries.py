@@ -1,7 +1,7 @@
 """
 Module: services.test_auth_password_policy_boundaries
-Purpose: Boundary-focused tests for the password policy (8–72 UTF-8 bytes) covering 7/8/72/73 bytes,
-         and ensuring typical inputs behave as expected on register and login.
+Purpose: Boundary-focused tests for the password policy (minimum 8 characters; no max) covering 7/8 and long passwords,
+         ensuring typical inputs behave as expected on register and login.
 
 These tests run against an in-memory SQLite database using the real repositories and AuthService.
 """
@@ -34,13 +34,13 @@ def _make_password_of_bytes(n: int) -> str:
     return "a" * n
 
 
-def test_7_bytes_password_fails(db: Session):
+def test_7_chars_password_fails(db: Session):
     service = AuthService(user_repository=UserRepository())
     email = "seven@example.com"
     pwd = _make_password_of_bytes(7)
     with pytest.raises(ValueError) as excinfo:
         service.register_user(db, email=email, password=pwd)
-    assert "8 and 72" in str(excinfo.value)
+    assert "8" in str(excinfo.value)
 
 
 def test_8_bytes_password_passes(db: Session):
@@ -54,7 +54,7 @@ def test_8_bytes_password_passes(db: Session):
     assert isinstance(token, str) and len(token) > 10
 
 
-def test_72_bytes_password_passes(db: Session):
+def test_72_chars_password_passes(db: Session):
     service = AuthService(user_repository=UserRepository())
     email = "seventytwo@example.com"
     pwd = _make_password_of_bytes(72)
@@ -65,13 +65,15 @@ def test_72_bytes_password_passes(db: Session):
     assert isinstance(token, str) and len(token) > 10
 
 
-def test_73_bytes_password_fails(db: Session):
+def test_2000_chars_password_passes(db: Session):
     service = AuthService(user_repository=UserRepository())
-    email = "seventythree@example.com"
-    pwd = _make_password_of_bytes(73)
-    with pytest.raises(ValueError) as excinfo:
-        service.register_user(db, email=email, password=pwd)
-    assert "8 and 72" in str(excinfo.value)
+    email = "twothousand@example.com"
+    pwd = _make_password_of_bytes(2000)
+    user = service.register_user(db, email=email, password=pwd)
+    assert user.email == email
+    user2, token = service.authenticate_user(db, email=email, password=pwd)
+    assert user2.id == user.id
+    assert isinstance(token, str) and len(token) > 10
 
 
 def test_string_6_chars_fails(db: Session):

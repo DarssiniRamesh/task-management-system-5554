@@ -1,8 +1,9 @@
 """
 Module: api.test_auth_register_endpoint
 Purpose: Integration-style tests for /auth/register to validate that:
- - Normal 8–72 byte passwords return 201 Created.
- - <8 or >72 byte passwords return 400 with a clear message.
+ - Normal passwords with >=8 characters return 201 Created.
+ - <8 characters return 400 with a clear message.
+ - Very long passwords are accepted (no 72-byte cap).
  - Duplicate email returns 409.
 The tests run against the FastAPI app with an in-memory SQLite database.
 
@@ -67,7 +68,7 @@ def test_register_with_valid_password_returns_201():
         assert "id" in data
 
 
-def test_register_with_7_bytes_returns_400():
+def test_register_with_7_chars_returns_400():
     with using_inmemory_db():
         client = _client()
         payload = {"email": "short@example.com", "password": _password_of_bytes(7)}
@@ -76,13 +77,12 @@ def test_register_with_7_bytes_returns_400():
         assert "8" in resp.json().get("detail", "")
 
 
-def test_register_with_73_bytes_returns_400():
+def test_register_with_1000_chars_returns_201():
     with using_inmemory_db():
         client = _client()
-        payload = {"email": "long@example.com", "password": _password_of_bytes(73)}
+        payload = {"email": "long@example.com", "password": _password_of_bytes(1000)}
         resp = client.post("/auth/register", json=payload)
-        assert resp.status_code == 400
-        assert "72" in resp.json().get("detail", "")
+        assert resp.status_code == 201, resp.text
 
 
 def test_register_duplicate_email_returns_409():

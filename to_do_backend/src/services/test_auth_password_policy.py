@@ -1,13 +1,14 @@
 """
 Module: services.test_auth_password_policy
 Purpose: Inline, unit-style quick checks for the authentication password policy to guard against
-         regressions that caused normal passwords to incorrectly trigger 72-byte bcrypt errors.
+         regressions. We ensure minimum length is enforced while allowing arbitrarily long passwords.
 
 Note:
 - These are simple tests runnable via pytest.
 - They validate that:
-  * A normal password (<=72 UTF-8 bytes) is accepted by service validation helpers.
-  * An over-72-byte password is rejected with a ValueError.
+  * A normal password (>=8 chars) is accepted by the service.
+  * A very long password is accepted (no 72-byte cap).
+  * <8 characters is rejected with ValueError.
   * Surrounding whitespace is stripped before validation.
 """
 from sqlalchemy.orm import Session
@@ -19,20 +20,6 @@ import pytest
 from src.db.session import Base
 from src.services.auth_service import AuthService
 from src.db.repositories import UserRepository
-from src.db.models import User
-
-
-class _InMemoryUserRepo(UserRepository):
-    """
-    Minimal in-memory DB usage via SQLite for quick tests.
-    """
-
-    def __init__(self, db: Session):
-        self._db = db
-
-    def create_user(self, db: Session, *, email: str, password: str) -> User:
-        # delegate to base implementation; using the provided db
-        return super().create_user(db, email=email, password=password)
 
 
 @pytest.fixture(scope="module")
@@ -50,7 +37,7 @@ def db() -> Session:
 def test_normal_password_is_accepted(db: Session):
     service = AuthService(user_repository=UserRepository())
     email = "user@example.com"
-    # Common strong password within bounds
+    # Common strong password with >=8 characters
     password = "Password123!"
     # Should not raise
     user = service.register_user(db, email=email, password=password)
@@ -73,11 +60,24 @@ def test_surrounding_whitespace_stripped(db: Session):
     assert token
 
 
-def test_over_72_bytes_password_rejected(db: Session):
+def test_short_password_rejected(db: Session):
+    service = AuthService(user_repository=UserRepository())
+    email = "shorty@example.com"
+    short_password = "short"  # 5 characters
+    with pytest.raises(ValueError) as exc:
+        service.register_user(db, email=email, password=short_password)
+    # Policy message mentions the minimum length of 8
+    assert "8" in str(exc.value)
+
+
+def test_very_long_password_is_accepted(db: Session):
     service = AuthService(user_repository=UserRepository())
     email = "toolong@example.com"
-    # Create a password that's >72 bytes in UTF-8. Use ASCII for determinism.
-    long_password = "A" * 73
-    with pytest.raises(ValueError) as exc:
-        service.register_user(db, email=email, password=long_password)
-    assert "8 and 72" in str(exc.value)
+    # Create a password that's very long (e.g., 5000 chars)
+    long_password = "A" * 5000
+    user = service.register_user(db, email=email, password=long_password)
+    assert user.email == email
+    # Login also works
+    user2, token = service.authenticate_user(db, email=email, password=long_password)
+    assert user2.id == user.id
+    assert token

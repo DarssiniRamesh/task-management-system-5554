@@ -2,8 +2,8 @@
 Module: schemas.auth
 Purpose: Pydantic models for authentication flows including registration, login, and token handling.
 Security: Excludes sensitive fields (like passwords) from public response models where appropriate.
-Enhancement: Allow typical user inputs at schema level and enforce bcrypt-compatible UTF-8 byte-length
-             policy (8–72 bytes) primarily in the service layer to avoid 422 errors for valid payloads.
+Enhancement: Allow typical user inputs at schema level. Service layer enforces minimum password length (>=8)
+             while allowing arbitrary-length passwords via SHA-256 pre-hash before bcrypt.
 """
 
 from datetime import datetime
@@ -17,8 +17,7 @@ def _validate_password_utf8_bytes(v: str) -> str:
     Validate that the provided password value is a string and normalize it.
 
     Notes:
-        - We ensure the value is a string; UTF-8 byte-length policy (8–72 bytes) is primarily enforced
-          in the service layer to return HTTP 400 consistently instead of 422.
+        - We ensure the value is a string. The service layer enforces a minimum length of 8 characters.
         - We do not trim or transform the password content to avoid altering user intent.
 
     Raises:
@@ -46,8 +45,8 @@ class _PasswordMixin(BaseModel):
     """
     password: str = Field(
         ...,
-        min_length=1,  # syntactic requirement
-        description="User password (must be 8–72 bytes inclusive when encoded in UTF-8).",
+        min_length=1,  # syntactic requirement; actual minimum of 8 enforced in service
+        description="User password (must be at least 8 characters).",
     )
 
     # Light validation: ensure string and non-empty; byte-length limits in service
