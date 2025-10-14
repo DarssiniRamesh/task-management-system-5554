@@ -6,7 +6,7 @@ Implementation details:
 - Primary scheme: Argon2 (via argon2-cffi) to be more robust across environments.
 - Fallback schemes: bcrypt_sha256 then bcrypt (raw) within a single CryptContext.
 - No manual low-level bcrypt pre-hashing: we rely entirely on passlib's implementations.
-- Support arbitrarily long passwords by configuring generous max_password_size for argon2 and bcrypt_sha256.
+- Support arbitrarily long passwords via bcrypt_sha256 wrapper (pre-hashes with SHA-256) when Argon2 is unavailable.
 
 Verification:
 - verify_password() delegates to CryptContext.verify(), which auto-detects the scheme from the hash.
@@ -59,15 +59,10 @@ except Exception as _exc:  # pragma: no cover - diagnostic logging only
 # Unified CryptContext configuration:
 # - Prefer argon2 for new hashes.
 # - Accept and verify bcrypt_sha256 and bcrypt for compatibility.
-# - Set large max_password_size where applicable to accommodate long passwords.
+# Note: Do not pass unsupported handler options; rely on passlib defaults.
 PWD_CONTEXT: Final[CryptContext] = CryptContext(
     schemes=["argon2", "bcrypt_sha256", "bcrypt"],
     deprecated="auto",
-    # Allow very long passwords; service layer enforces only minimum length
-    argon2__max_password_size=10_000_000,
-    bcrypt_sha256__max_password_size=10_000_000,
-    # bcrypt raw has an inherent 72-byte limit; we still include it for legacy verification
-    bcrypt__max_password_size=72,
 )
 
 # Import passlib exceptions defensively
