@@ -13,7 +13,14 @@ Notes:
 
 import hashlib
 from passlib.context import CryptContext
-from passlib.exc import ExpectedStringError, InvalidHashError, UnknownHashError
+
+# Import passlib exceptions defensively; not all environments expose identical classes.
+# We will only use the ones guaranteed to be Exception subclasses in our handlers.
+try:  # pragma: no cover - import shape may vary by environment
+    from passlib.exc import InvalidHashError, UnknownHashError  # type: ignore
+except Exception:  # pragma: no cover - extreme fallback if passlib.exc unavailable
+    InvalidHashError = Exception  # type: ignore
+    UnknownHashError = Exception  # type: ignore
 
 # Configure passlib CryptContext for bcrypt hashing.
 _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -49,8 +56,9 @@ def hash_password(plain_password: str) -> str:
         # Pre-hash with SHA-256 to remove bcrypt 72-byte limitation
         prehashed = _sha256_hex(plain_password)
         return _pwd_context.hash(prehashed)
-    except (ExpectedStringError, ValueError) as exc:
-        # Wrap and re-raise as a precise ValueError for service/routers.
+    except Exception as exc:
+        # Wrap and re-raise as a precise ValueError for service/routers without leaking internals.
+        # Use a deterministic message for client-facing consistency.
         raise ValueError("Password hashing failed.") from exc
 
 
@@ -73,6 +81,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
         prehashed = _sha256_hex(plain_password)
         return _pwd_context.verify(prehashed, hashed_password)
-    except (InvalidHashError, UnknownHashError, ExpectedStringError, ValueError):
-        # Treat invalid/unknown hash formats or bad input as non-match rather than raising
+    except (InvalidHashError, UnknownHashError, ValueError, Exception):
+        # Treat invalid/unknown hash formats or bad input as non-match rather than raising.
+        # Catch-all Exception included to handle environments where passlib raises different subclasses.
         return False
