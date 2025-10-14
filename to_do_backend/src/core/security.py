@@ -60,14 +60,26 @@ def hash_password(plain_password: str) -> str:
         # Pre-hash with SHA-256 to remove bcrypt 72-byte limitation
         prehashed = _sha256_hex(plain_password)
         # Some environments emit a trapped AttributeError reading bcrypt version but still return a valid hash.
+        # Passlib logs "(trapped) error reading bcrypt version" but hashing still succeeds.
+        # We therefore attempt hashing and only fail if the returned hash is invalid.
         hashed = _pwd_context.hash(prehashed)
-        # Ensure we actually received a string hash; otherwise treat as failure.
         if not isinstance(hashed, str) or not hashed:
+            # Defensive: treat empty/non-str results as failure
             raise ValueError("Password hashing failed.")
         return hashed
+    except AttributeError:
+        # Certain environments trigger AttributeError on version introspection while still supporting hashing.
+        # Retry once; if it still fails, raise a stable error.
+        try:
+            prehashed = _sha256_hex(plain_password)
+            hashed = _pwd_context.hash(prehashed)
+            if not isinstance(hashed, str) or not hashed:
+                raise ValueError("Password hashing failed.")
+            return hashed
+        except Exception as inner_exc:
+            raise ValueError("Password hashing failed.") from inner_exc
     except Exception as exc:
-        # Passlib/bcrypt may raise non-fatal warnings internally but still succeed.
-        # If we end up here, hashing genuinely failed; raise a stable public message.
+        # Any other unexpected error indicates hashing truly failed.
         raise ValueError("Password hashing failed.") from exc
 
 
