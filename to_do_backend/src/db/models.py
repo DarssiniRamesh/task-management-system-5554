@@ -10,7 +10,17 @@ Design considerations:
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    Index,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.db.session import Base
@@ -19,10 +29,14 @@ from src.db.session import Base
 class User(Base):
     """User account model storing unique email and hashed password."""
     __tablename__ = "users"
-    __table_args__ = (UniqueConstraint("email", name="uq_users_email"),)
+    __table_args__ = (
+        UniqueConstraint("email", name="uq_users_email"),
+        # Explicit index for quick lookups by email (even though unique creates an index, be explicit)
+        Index("ix_users_email", "email"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     # Add both client-side default and server-side default to ensure values are present
     # even on SQLite prior to commit (server_default may not populate until commit).
@@ -42,9 +56,13 @@ class User(Base):
 class Task(Base):
     """Task model representing to-do items associated with a user."""
     __tablename__ = "tasks"
+    __table_args__ = (
+        # Explicit index on user_id to optimize user-scoped queries
+        Index("ix_tasks_user_id", "user_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="0")

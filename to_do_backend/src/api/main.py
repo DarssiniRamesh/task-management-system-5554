@@ -42,19 +42,28 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     """
-    Application startup hook to initialize the database engine and create tables.
+    Application startup hook to initialize the database engine and (optionally) create tables.
 
     This function:
     - Initializes the SQLAlchemy engine and session factory.
-    - Creates all tables if they do not exist (safe for local dev with SQLite).
+    - For development or SQLite usage, creates all tables if they do not exist (convenience for local dev).
+      For production with networked databases, use Alembic migrations instead.
 
     Errors are logged to aid diagnostics without exposing sensitive details.
     """
     try:
         engine = init_engine()
-        # Create tables if not present; for dev convenience. In production, use migrations.
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database initialized and tables ensured.")
+        # Dev-only auto-creation of tables:
+        from src.core.config import get_settings
+        settings = get_settings()
+        db_url = (settings.database_url or "").lower()
+        is_dev = (settings.environment or "").lower() == "development"
+        is_sqlite = db_url.startswith("sqlite")
+        if is_dev or is_sqlite:
+            Base.metadata.create_all(bind=engine)
+            logger.info("Database initialized and tables ensured for dev/SQLite.")
+        else:
+            logger.info("Database engine initialized. Skipping create_all (use Alembic in non-dev).")
     except Exception as exc:
         # Log a succinct message; avoid dumping secrets or connection strings
         logger.error("Failed to initialize database engine or create tables: %s", exc)
