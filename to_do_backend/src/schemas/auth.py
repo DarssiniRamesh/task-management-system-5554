@@ -73,8 +73,10 @@ class UserResponse(_BaseUser):
     created_at: datetime = Field(..., description="User creation timestamp.")
     updated_at: datetime = Field(..., description="User last update timestamp.")
 
-    class Config:
-        from_attributes = True
+    # Pydantic v2 configuration: enable ORM attribute population
+    model_config = {
+        "from_attributes": True,
+    }
 
 
 # PUBLIC_INTERFACE
