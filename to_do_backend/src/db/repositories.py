@@ -58,7 +58,12 @@ class UserRepository:
         user = User(email=email, hashed_password=hash_password(password))
         db.add(user)
         try:
-            db.flush()  # Attempt to persist to catch unique constraint violations early
+            # Flush pending INSERT so constraints are checked and PK is assigned
+            db.flush()
+            # Refresh the instance so server_default columns (created_at/updated_at) are loaded
+            # Some databases (e.g., SQLite with server_default func.now()) won't populate the
+            # ORM object's attributes until refresh/commit; refreshing ensures response models validate.
+            db.refresh(user)
         except IntegrityError as exc:
             db.rollback()
             # Translate to domain-specific error without leaking internals
