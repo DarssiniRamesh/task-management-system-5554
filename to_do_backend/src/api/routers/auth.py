@@ -29,7 +29,10 @@ if not logger.handlers:
     summary="Register a new user",
     description="Creates a user with a hashed password. Returns basic user information. Password must be at least 8 characters; no upper byte-length limit.",
     responses={
-        201: {"description": "User created."},
+        201: {
+            "description": "User created.",
+            "content": {"application/json": {"schema": UserResponse.model_json_schema()}},
+        },
         400: {"description": "Validation error."},
         409: {"description": "Email already exists."},
     },
@@ -58,7 +61,10 @@ def register_user(
         logger.info("Register request received", extra={"op": "auth_register", "email": payload.email})
         # Delegate to service; transaction lifecycle is handled by get_db dependency.
         user = auth_service.register_user(db, email=payload.email, password=payload.password)
-        logger.info("User registered successfully", extra={"op": "auth_register", "user_id": getattr(user, "id", None), "email": payload.email})
+        logger.info(
+            "User registered successfully",
+            extra={"op": "auth_register", "user_id": getattr(user, "id", None), "email": payload.email},
+        )
         return UserResponse.model_validate(user)
     except DuplicateEmailError as exc:
         # 409 Conflict for duplicate emails (unique constraint violation)
@@ -66,24 +72,31 @@ def register_user(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except RepositoryError as exc:
         # Controlled repository-layer error; surface details as provided without masking.
-        detail = str(exc).strip() or "Repository error."
-        logger.warning("RepositoryError during registration", extra={"op": "auth_register", "email": payload.email, "detail": detail})
+        detail = (str(exc) or "").strip() or "Repository error."
+        logger.warning(
+            "RepositoryError during registration",
+            extra={"op": "auth_register", "email": payload.email, "detail": detail},
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
     except ValueError as exc:
-        # Preserve the actual validation message from the service/repository.
-        # If the message clearly indicates the password policy, keep it; otherwise pass through as-is.
+        # Preserve the actual validation message from the service/repository without generic fallbacks.
         msg = (str(exc) or "").strip()
         if not msg:
-            # If no message was provided, fall back to the policy message only for password-related issues.
+            # If the service raised a ValueError without a message, use the explicit password policy message.
             msg = POLICY_MESSAGE
-        logger.warning("Validation error during registration", extra={"op": "auth_register", "email": payload.email, "detail": msg})
+        logger.warning(
+            "Validation error during registration",
+            extra={"op": "auth_register", "email": payload.email, "detail": msg},
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg) from exc
     except HTTPException:
         # Let already-formed HTTP exceptions bubble up unchanged.
         raise
     except Exception:
         # Unexpected error: log and re-raise to avoid masking root cause as a generic 400.
-        logger.exception("Unexpected error during user registration", extra={"op": "auth_register", "email": payload.email})
+        logger.exception(
+            "Unexpected error during user registration", extra={"op": "auth_register", "email": payload.email}
+        )
         raise
 
 
@@ -93,7 +106,10 @@ def register_user(
     summary="Login",
     description="Validates user credentials and returns a JWT access token (HS256). Password must be at least 8 characters.",
     responses={
-        200: {"description": "Login successful."},
+        200: {
+            "description": "Login successful.",
+            "content": {"application/json": {"schema": TokenResponse.model_json_schema()}},
+        },
         400: {"description": "Validation error."},
         401: {"description": "Invalid credentials."},
     },
