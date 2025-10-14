@@ -65,7 +65,10 @@ def register_user(
             "User registered successfully",
             extra={"op": "auth_register", "user_id": getattr(user, "id", None), "email": payload.email},
         )
-        return UserResponse.model_validate(user)
+        # Validate against the response model and return a JSON-serializable dict to avoid
+        # any ResponseValidationError due to ORM conversion edge cases.
+        # Return a plain dict derived from the validated model to guarantee serialization.
+        return UserResponse.model_validate(user).model_dump()
     except DuplicateEmailError as exc:
         # 409 Conflict for duplicate emails (unique constraint violation)
         logger.warning("Duplicate email on registration", extra={"op": "auth_register", "email": payload.email})
