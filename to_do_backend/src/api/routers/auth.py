@@ -66,6 +66,7 @@ def register_user(
     description="Validates user credentials and returns a JWT access token (HS256).",
     responses={
         200: {"description": "Login successful."},
+        400: {"description": "Validation error."},
         401: {"description": "Invalid credentials."},
     },
 )
@@ -87,13 +88,16 @@ def login(
         TokenResponse with access_token and token_type bearer.
 
     Raises:
-        HTTPException: 401 if credentials are invalid.
+        HTTPException: 400 if validation fails; 401 if credentials are invalid.
     """
     try:
         _, token = auth_service.authenticate_user(db, email=payload.email, password=payload.password)
         return TokenResponse(access_token=token)
     except InvalidCredentialsError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+    except ValueError as exc:
+        # Enforce consistent 400 behavior for byte-length policy violations
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.get(

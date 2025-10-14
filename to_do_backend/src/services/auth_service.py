@@ -2,6 +2,8 @@
 Module: services.auth_service
 Purpose: Business logic for authentication including registration, login, and JWT handling.
 Security: Uses HS256 JWT with secret from environment settings. Never logs secrets or raw passwords.
+Enhancement: Enforce bcrypt UTF-8 byte-length constraints (8–72 bytes) defensively in service layer
+             to prevent hashing/verification with invalid lengths.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -26,6 +28,20 @@ class InvalidCredentialsError(AuthServiceError):
 
 class TokenValidationError(AuthServiceError):
     """Raised when token validation fails."""
+
+
+def _password_within_bcrypt_bounds(password: str) -> bool:
+    """
+    Return True if password is between 8 and 72 bytes (UTF-8), else False.
+    """
+    if not isinstance(password, str) or not password:
+        return False
+    try:
+        byte_len = len(password.encode("utf-8"))
+        return 8 <= byte_len <= 72
+    except Exception:
+        # If encoding somehow fails, treat as invalid input.
+        return False
 
 
 class AuthService:
@@ -56,6 +72,10 @@ class AuthService:
             DuplicateEmailError: If the email is already registered.
             ValueError: On invalid input.
         """
+        # Defensive check: enforce bcrypt byte-length policy even if schema validation was bypassed.
+        if not _password_within_bcrypt_bounds(password):
+            # Raise a ValueError so routers can consistently translate to HTTP 400
+            raise ValueError("Password must be between 8 and 72 bytes.")
         return self._user_repo.create_user(db, email=email, password=password)
 
     # PUBLIC_INTERFACE
@@ -73,7 +93,13 @@ class AuthService:
 
         Raises:
             InvalidCredentialsError: If authentication fails.
+            ValueError: If password violates byte-length policy.
         """
+        # Defensive check before verifying against bcrypt hash to avoid implicit truncation.
+        if not _password_within_bcrypt_bounds(password):
+            # Service-layer 400 via router; keep message generic and consistent.
+            raise ValueError("Password must be between 8 and 72 bytes.")
+
         user = self._user_repo.authenticate(db, email=email, password=password)
         if not user:
             raise InvalidCredentialsError("Invalid email or password.")
