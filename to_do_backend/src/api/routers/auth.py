@@ -3,6 +3,8 @@ Module: api.routers.auth
 Purpose: Authentication routes for user registration, login, and profile retrieval.
 """
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -29,8 +31,8 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 )
 def register_user(
     payload: RegisterRequest,
-    db: Session = Depends(get_db),
-    auth_service: AuthService = Depends(AuthService),
+    db: Annotated[Session, Depends(get_db)],
+    auth_service: Annotated[AuthService, Depends(AuthService)],
 ):
     """
     Register a new user.
@@ -68,8 +70,8 @@ def register_user(
 )
 def login(
     payload: LoginRequest,
-    db: Session = Depends(get_db),
-    auth_service: AuthService = Depends(AuthService),
+    db: Annotated[Session, Depends(get_db)],
+    auth_service: Annotated[AuthService, Depends(AuthService)],
 ):
     """
     Login user and get access token.
@@ -100,9 +102,9 @@ def login(
     responses={200: {"description": "User info returned."}, 401: {"description": "Unauthorized."}},
 )
 def get_me(
-    user_id: int = Depends(get_current_user_id),
-    db: Session = Depends(get_db),
-    auth_service: AuthService = Depends(AuthService),
+    user_id: Annotated[int, Depends(get_current_user_id)],
+    db: Annotated[Session, Depends(get_db)],
+    auth_service: Annotated[AuthService, Depends(AuthService)],
 ):
     """
     Get the current authenticated user's profile.

@@ -3,7 +3,7 @@ Module: api.routers.tasks
 Purpose: Secured CRUD endpoints for tasks. Users can only access their own tasks.
 """
 
-from typing import List
+from typing import Annotated, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -28,11 +28,11 @@ router = APIRouter(prefix="/tasks", tags=["Tasks"])
     description="Returns a paginated list of tasks belonging to the authenticated user.",
 )
 def list_tasks(
+    user_id: Annotated[int, Depends(get_current_user_id)],
+    db: Annotated[Session, Depends(get_db)],
+    task_service: Annotated[TaskService, Depends(TaskService)],
     skip: int = Query(0, ge=0, description="Number of items to skip."),
     limit: int = Query(50, ge=1, le=100, description="Maximum number of items to return."),
-    user_id: int = Depends(get_current_user_id),
-    db: Session = Depends(get_db),
-    task_service: TaskService = Depends(TaskService),
 ):
     """
     List tasks for the current user with pagination.
@@ -50,9 +50,9 @@ def list_tasks(
 )
 def get_task(
     task_id: int,
-    user_id: int = Depends(get_current_user_id),
-    db: Session = Depends(get_db),
-    task_service: TaskService = Depends(TaskService),
+    user_id: Annotated[int, Depends(get_current_user_id)],
+    db: Annotated[Session, Depends(get_db)],
+    task_service: Annotated[TaskService, Depends(TaskService)],
 ):
     """
     Retrieve a single task by ID.
@@ -73,9 +73,9 @@ def get_task(
 )
 def create_task(
     payload: TaskCreateRequest,
-    user_id: int = Depends(get_current_user_id),
-    db: Session = Depends(get_db),
-    task_service: TaskService = Depends(TaskService),
+    user_id: Annotated[int, Depends(get_current_user_id)],
+    db: Annotated[Session, Depends(get_db)],
+    task_service: Annotated[TaskService, Depends(TaskService)],
 ):
     """
     Create a new task.
@@ -94,9 +94,9 @@ def create_task(
 def update_task(
     task_id: int,
     payload: TaskUpdateRequest,
-    user_id: int = Depends(get_current_user_id),
-    db: Session = Depends(get_db),
-    task_service: TaskService = Depends(TaskService),
+    user_id: Annotated[int, Depends(get_current_user_id)],
+    db: Annotated[Session, Depends(get_db)],
+    task_service: Annotated[TaskService, Depends(TaskService)],
 ):
     """
     Full update of a task.
@@ -126,10 +126,10 @@ def update_task(
 )
 def toggle_task(
     task_id: int,
+    user_id: Annotated[int, Depends(get_current_user_id)],
+    db: Annotated[Session, Depends(get_db)],
+    task_service: Annotated[TaskService, Depends(TaskService)],
     payload: TaskToggleRequest | None = None,
-    user_id: int = Depends(get_current_user_id),
-    db: Session = Depends(get_db),
-    task_service: TaskService = Depends(TaskService),
 ):
     """
     Toggle completion or set explicit completion state.
@@ -153,9 +153,9 @@ def toggle_task(
 )
 def delete_task(
     task_id: int,
-    user_id: int = Depends(get_current_user_id),
-    db: Session = Depends(get_db),
-    task_service: TaskService = Depends(TaskService),
+    user_id: Annotated[int, Depends(get_current_user_id)],
+    db: Annotated[Session, Depends(get_db)],
+    task_service: Annotated[TaskService, Depends(TaskService)],
 ):
     """
     Delete a task.
