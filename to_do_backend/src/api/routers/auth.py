@@ -37,13 +37,18 @@ def register_user(
 
     Parameters:
         payload: RegisterRequest containing email and password.
+        db: Injected SQLAlchemy session via Depends.
+        auth_service: Injected AuthService via Depends.
 
     Returns:
         UserResponse with id, email, timestamps.
+
+    Raises:
+        HTTPException: 409 if email exists; 400 if validation fails.
     """
     try:
+        # Delegate to service; transaction lifecycle is handled by get_db dependency.
         user = auth_service.register_user(db, email=payload.email, password=payload.password)
-        # The session is committed in get_db dependency after returning
         return UserResponse.model_validate(user)
     except DuplicateEmailError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
@@ -71,9 +76,14 @@ def login(
 
     Parameters:
         payload: LoginRequest containing email and password.
+        db: Injected SQLAlchemy session via Depends.
+        auth_service: Injected AuthService via Depends.
 
     Returns:
         TokenResponse with access_token and token_type bearer.
+
+    Raises:
+        HTTPException: 401 if credentials are invalid.
     """
     try:
         _, token = auth_service.authenticate_user(db, email=payload.email, password=payload.password)
@@ -97,8 +107,16 @@ def get_me(
     """
     Get the current authenticated user's profile.
 
+    Parameters:
+        user_id: Injected current user id parsed from Bearer token via Depends(get_current_user_id).
+        db: Injected SQLAlchemy session via Depends.
+        auth_service: Injected AuthService via Depends.
+
     Returns:
         UserResponse for the current user.
+
+    Raises:
+        HTTPException: 401 if user not found or token invalid.
     """
     user = auth_service.get_user_by_id(db, user_id=user_id)
     if not user:

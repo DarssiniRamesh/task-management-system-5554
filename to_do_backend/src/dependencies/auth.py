@@ -14,7 +14,9 @@ from src.services.auth_service import AuthService, TokenValidationError
 
 # PUBLIC_INTERFACE
 def get_current_user_id(
-    request: Request, db: Annotated[Session, Depends(get_db)], auth_service: AuthService = Depends(AuthService)
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    auth_service: Annotated[AuthService, Depends(AuthService)],
 ) -> int:
     """
     Extract Bearer token from Authorization header, validate it, and return the user id.
@@ -22,7 +24,7 @@ def get_current_user_id(
     Args:
         request: FastAPI Request to access headers.
         db: SQLAlchemy session (unused here but retained for potential future lookups).
-        auth_service: AuthService dependency.
+        auth_service: Injected AuthService via Depends.
 
     Returns:
         int: Current authenticated user's ID.
