@@ -32,18 +32,27 @@ class TokenValidationError(AuthServiceError):
     """Raised when token validation fails."""
 
 
-def _normalized_password(password: str) -> str:
+# PUBLIC_INTERFACE
+def normalized_password(password: str) -> str:
     """
     Normalize password inputs safely.
 
-    - Strip surrounding whitespace only (do not transform internal content).
-    - Ensure a string is returned for downstream processing.
+    Notes:
+        - Strips surrounding whitespace only (does not alter internal content).
+        - Returns a string suitable for hashing/verification.
+        - Does not perform Unicode normalization that could change byte-length.
 
-    We explicitly do not perform any Unicode normalization that could expand bytes or change semantics.
+    Args:
+        password: Raw password input.
+
+    Returns:
+        The password with surrounding whitespace removed.
+
+    Raises:
+        ValueError: If input is not a string or normalization yields an empty string.
     """
     if not isinstance(password, str):
         raise ValueError("Password must be a string.")
-    # Surrounding whitespace is often accidental (copy/paste); strip without altering internal content.
     normalized = password.strip()
     if normalized == "":
         # Ensure normalization doesn't produce empty values
@@ -51,14 +60,22 @@ def _normalized_password(password: str) -> str:
     return normalized
 
 
-def _password_within_bcrypt_bounds(password: str) -> bool:
+# PUBLIC_INTERFACE
+def password_within_bcrypt_bounds(password: str) -> bool:
     """
-    Return True if password is between 8 and 72 bytes (UTF-8), else False.
+    Check if a password is within the inclusive bcrypt bounds of 8–72 UTF-8 bytes.
+
+    Args:
+        password: Candidate password string.
+
+    Returns:
+        True if 8 <= len(password.encode('utf-8')) <= 72, else False.
     """
     if not isinstance(password, str) or password == "":
         return False
     try:
         byte_len = len(password.encode("utf-8"))
+        # Inclusive boundaries per bcrypt policy
         return 8 <= byte_len <= 72
     except Exception:
         # If encoding somehow fails, treat as invalid input.
@@ -95,16 +112,16 @@ class AuthService:
         """
         # Normalize inputs
         email = (email or "").strip()
-        normalized_password = _normalized_password(password)
+        normalized_pwd = normalized_password(password)
 
         # Defensive check: enforce bcrypt byte-length policy (8–72 bytes).
-        if not _password_within_bcrypt_bounds(normalized_password):
+        if not password_within_bcrypt_bounds(normalized_pwd):
             # Raise a ValueError so routers can consistently translate to HTTP 400
-            raise ValueError("Password must be between 8 and 72 UTF-8 bytes.")
+            raise ValueError("Password must be between 8 and 72 UTF-8 bytes (inclusive).")
 
         # Delegate hashing to repository; ensure repository does not mutate/truncate password.
         try:
-            return self._user_repo.create_user(db, email=email, password=normalized_password)
+            return self._user_repo.create_user(db, email=email, password=normalized_pwd)
         except ValueError as exc:
             # Preserve explicit validation messages (e.g., from repository or hashing)
             # If hashing failed, surface a precise message; otherwise, bubble up.
@@ -133,15 +150,15 @@ class AuthService:
         """
         # Normalize inputs (mirror register path)
         email = (email or "").strip()
-        normalized_password = _normalized_password(password)
+        normalized_pwd = normalized_password(password)
 
         # Defensive check before verifying against bcrypt hash to avoid implicit truncation.
-        if not _password_within_bcrypt_bounds(normalized_password):
+        if not password_within_bcrypt_bounds(normalized_pwd):
             # Service-layer 400 via router; keep message generic and consistent.
-            raise ValueError("Password must be between 8 and 72 UTF-8 bytes.")
+            raise ValueError("Password must be between 8 and 72 UTF-8 bytes (inclusive).")
 
         try:
-            user = self._user_repo.authenticate(db, email=email, password=normalized_password)
+            user = self._user_repo.authenticate(db, email=email, password=normalized_pwd)
         except ValueError as exc:
             # Preserve validation messages (though repository authenticate shouldn't raise in normal flow)
             raise ValueError(str(exc) or "Invalid input.") from exc

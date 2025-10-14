@@ -47,7 +47,7 @@ class _PasswordMixin(BaseModel):
     password: str = Field(
         ...,
         min_length=1,  # syntactic requirement
-        description="User password (must be 8–72 bytes when encoded in UTF-8).",
+        description="User password (must be 8–72 bytes inclusive when encoded in UTF-8).",
     )
 
     # Light validation: ensure string and non-empty; byte-length limits in service

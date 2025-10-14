@@ -57,14 +57,15 @@ def register_user(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
         # Map service-layer policy violations and hashing/processing errors to 400 with precise detail.
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        detail = str(exc) or "Password must be between 8 and 72 UTF-8 bytes (inclusive)."
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
 
 
 @router.post(
     "/login",
     response_model=TokenResponse,
     summary="Login",
-    description="Validates user credentials and returns a JWT access token (HS256). Password must be 8–72 UTF-8 bytes.",
+    description="Validates user credentials and returns a JWT access token (HS256). Password must be 8–72 UTF-8 bytes (inclusive).",
     responses={
         200: {"description": "Login successful."},
         400: {"description": "Validation error."},
@@ -98,7 +99,8 @@ def login(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
     except ValueError as exc:
         # Enforce consistent 400 behavior (service enforces 8–72 UTF-8 byte policy)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        detail = str(exc) or "Password must be between 8 and 72 UTF-8 bytes (inclusive)."
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
 
 
 @router.get(
