@@ -17,6 +17,9 @@ from src.dependencies.auth import get_current_user_id, get_auth_service
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 logger = logging.getLogger("to_do_backend.api.routers.auth")
+# Ensure logger has a handler in case app-wide config didn't attach one in certain envs
+if not logger.handlers:
+    logging.basicConfig(level=logging.INFO)
 
 
 @router.post(
@@ -52,15 +55,19 @@ def register_user(
         HTTPException: 409 if email exists; 400 if validation fails.
     """
     try:
+        logger.info("Register request received", extra={"op": "auth_register", "email": payload.email})
         # Delegate to service; transaction lifecycle is handled by get_db dependency.
         user = auth_service.register_user(db, email=payload.email, password=payload.password)
+        logger.info("User registered successfully", extra={"op": "auth_register", "user_id": getattr(user, "id", None), "email": payload.email})
         return UserResponse.model_validate(user)
     except DuplicateEmailError as exc:
         # 409 Conflict for duplicate emails (unique constraint violation)
+        logger.warning("Duplicate email on registration", extra={"op": "auth_register", "email": payload.email})
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except RepositoryError as exc:
         # Controlled repository-layer error; surface details as provided without masking.
         detail = str(exc).strip() or "Repository error."
+        logger.warning("RepositoryError during registration", extra={"op": "auth_register", "email": payload.email, "detail": detail})
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
     except ValueError as exc:
         # Preserve the actual validation message from the service/repository.
@@ -69,13 +76,14 @@ def register_user(
         if not msg:
             # If no message was provided, fall back to the policy message only for password-related issues.
             msg = POLICY_MESSAGE
+        logger.warning("Validation error during registration", extra={"op": "auth_register", "email": payload.email, "detail": msg})
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg) from exc
     except HTTPException:
         # Let already-formed HTTP exceptions bubble up unchanged.
         raise
     except Exception:
         # Unexpected error: log and re-raise to avoid masking root cause as a generic 400.
-        logger.exception("Unexpected error during user registration for email=%s", payload.email)
+        logger.exception("Unexpected error during user registration", extra={"op": "auth_register", "email": payload.email})
         raise
 
 
@@ -111,25 +119,30 @@ def login(
         HTTPException: 400 if validation fails; 401 if credentials are invalid.
     """
     try:
+        logger.info("Login request received", extra={"op": "auth_login", "email": payload.email})
         _, token = auth_service.authenticate_user(db, email=payload.email, password=payload.password)
+        logger.info("Login successful", extra={"op": "auth_login", "email": payload.email})
         return TokenResponse(access_token=token)
     except InvalidCredentialsError as exc:
         # 401 Unauthorized for bad credentials without leaking specifics
+        logger.warning("Invalid credentials", extra={"op": "auth_login", "email": payload.email})
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
     except RepositoryError as exc:
         # Repository errors in login: surface the message (do not leak internals beyond controlled msg)
         detail = (str(exc) or "").strip() or "Repository error."
+        logger.warning("RepositoryError during login", extra={"op": "auth_login", "email": payload.email, "detail": detail})
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
     except ValueError as exc:
         # Enforce consistent 400 behavior while preserving precise messages
         detail = (str(exc) or "").strip() or POLICY_MESSAGE
+        logger.warning("Validation error during login", extra={"op": "auth_login", "email": payload.email, "detail": detail})
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
     except HTTPException:
         # Allow previously raised HTTP errors to propagate
         raise
     except Exception:
         # Unexpected error: log and re-raise to avoid masking root cause as a generic 400.
-        logger.exception("Unexpected error during login for email=%s", payload.email)
+        logger.exception("Unexpected error during login", extra={"op": "auth_login", "email": payload.email})
         raise
 
 
