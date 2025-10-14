@@ -123,9 +123,13 @@ def login(
         # Enforce consistent 400 behavior (service enforces >=8 characters policy)
         detail = str(exc) or POLICY_MESSAGE
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
-    except Exception as exc:
-        # Final safety net to avoid 500 for predictable flow issues
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid input.") from exc
+    except HTTPException:
+        # Allow previously raised HTTP errors to propagate
+        raise
+    except Exception:
+        # Unexpected error: log and re-raise to avoid masking root cause as a generic 400.
+        logger.exception("Unexpected error during login for email=%s", payload.email)
+        raise
 
 
 @router.get(
