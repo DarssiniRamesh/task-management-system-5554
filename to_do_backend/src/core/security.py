@@ -2,73 +2,99 @@
 Module: security
 Purpose: Security utilities for password hashing and verification.
 
-Implementation details:
-- Primary scheme: Argon2 (via argon2-cffi) to be more robust across environments.
-- Fallback schemes: bcrypt_sha256 then bcrypt (raw) within a single CryptContext.
-- No manual low-level bcrypt pre-hashing: we rely entirely on passlib's implementations.
-- Support arbitrarily long passwords via bcrypt_sha256 wrapper (pre-hashes with SHA-256) when Argon2 is unavailable.
+Design:
+- Prefer a single, verifiably available scheme to avoid intermittent failures:
+  1) Try Argon2 (via argon2-cffi). If we can successfully hash a probe value at import time,
+     we pin the context to argon2-only.
+  2) Otherwise, fall back to bcrypt_sha256-only (supports arbitrarily long passwords safely).
+
+Rationale:
+- Using a single active scheme avoids ambiguity and backend/handler mis-selection inside Passlib
+  that can lead to sporadic "Password hashing failed." errors on valid inputs.
+- We proactively validate the backend by hashing a probe value during import; this ensures the
+  chosen scheme truly works in the current environment.
 
 Verification:
-- verify_password() delegates to CryptContext.verify(), which auto-detects the scheme from the hash.
-- On verify errors (e.g., unknown scheme/missing backend), verification returns False without raising.
+- verify_password() delegates to the single-scheme CryptContext.verify(), which auto-detects
+  based on the configured scheme for the stored hash.
+- Any handler/backend errors during verification are treated as a simple mismatch (False).
+
+Security:
+- Never log passwords or sensitive values. Only log the chosen scheme and high-level exceptions.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Final, Tuple
+from typing import Final
 
 from passlib.context import CryptContext
-from passlib import exc as passlib_exc  # Use concrete exceptions; PasslibError is not present in 1.7.x
+from passlib import exc as passlib_exc
 
-# Configure module-level logger. In production prefer centralized structured logging.
+# Configure module-level logger (prefer centralized config in production)
 logger = logging.getLogger("to_do_backend.core.security")
 if not logger.handlers:
     logging.basicConfig(level=logging.INFO)
 
-# Detect availability of optional backends to help diagnose environment issues
-try:  # pragma: no cover - diagnostic logging only
-    import argon2 as _argon2  # type: ignore  # noqa: F401
 
-    _ARGON2_AVAILABLE: Final[bool] = True
-    logger.info(
-        "Argon2 backend detected.",
-        extra={"component": "security", "argon2_available": True},
-    )
-except Exception as _exc:  # pragma: no cover - diagnostic logging only
-    _ARGON2_AVAILABLE = False
-    logger.warning(
-        "Argon2 backend NOT available. Ensure 'argon2-cffi' is installed.",
-        extra={"component": "security", "argon2_available": False, "exc_type": _exc.__class__.__name__},
-    )
+def _build_pwd_context() -> tuple[CryptContext, str]:
+    """
+    Build a CryptContext with a single, verifiably available scheme.
 
-try:  # pragma: no cover - diagnostic logging only
-    import bcrypt as _bcrypt  # type: ignore  # noqa: F401
+    Tries argon2 first; if hashing a probe fails for any reason (missing backend, runtime
+    constraints), falls back to bcrypt_sha256.
 
-    _BCRYPT_AVAILABLE: Final[bool] = True
-    logger.info(
-        "bcrypt backend detected.",
-        extra={"component": "security", "bcrypt_available": True},
-    )
-except Exception as _exc:  # pragma: no cover - diagnostic logging only
-    _BCRYPT_AVAILABLE = False
-    logger.warning(
-        "bcrypt backend NOT available. Ensure 'bcrypt' or 'passlib[bcrypt]' is installed.",
-        extra={"component": "security", "bcrypt_available": False, "exc_type": _exc.__class__.__name__},
-    )
+    Returns:
+        Tuple of (CryptContext, active_scheme)
 
-# Unified CryptContext configuration:
-# - Prefer argon2 for new hashes.
-# - Accept and verify bcrypt_sha256 and bcrypt for compatibility.
-# Note: Do not pass unsupported handler options; rely on passlib defaults.
-PWD_CONTEXT: Final[CryptContext] = CryptContext(
-    schemes=["argon2", "bcrypt_sha256", "bcrypt"],
-    deprecated="auto",
-)
+    Raises:
+        RuntimeError: If neither argon2 nor bcrypt_sha256 can be verified.
+    """
+    # Attempt Argon2
+    argon2_available = False
+    try:  # pragma: no cover - import-time availability check
+        import argon2  # noqa: F401
+        argon2_available = True
+    except Exception as _exc:  # pragma: no cover - diagnostic only
+        logger.warning(
+            "Argon2 backend not importable; considering fallback.",
+            extra={"component": "security", "exc_type": _exc.__class__.__name__},
+        )
 
-# Build a robust tuple of passlib hashing/verification exceptions we want to handle for fallbacks.
-# Passlib 1.7.x exceptions do not share a single base like "PasslibError", so we compose a tuple.
-_HASH_EXCEPTIONS: Tuple[type[BaseException], ...] = tuple(
+    if argon2_available:
+        try:
+            ctx = CryptContext(schemes=["argon2"], deprecated="auto")
+            # Probe-hash to ensure runtime backend is truly usable
+            ctx.hash("kavia_probe_value")
+            logger.info("Active password hashing scheme selected: argon2")
+            return ctx, "argon2"
+        except Exception as _exc:
+            logger.warning(
+                "Argon2 probe hashing failed; falling back to bcrypt_sha256.",
+                extra={"component": "security", "exc_type": _exc.__class__.__name__},
+            )
+
+    # Fallback to bcrypt_sha256 (safe for long passwords via pre-hash)
+    try:
+        ctx = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
+        ctx.hash("kavia_probe_value")
+        logger.info("Active password hashing scheme selected: bcrypt_sha256")
+        return ctx, "bcrypt_sha256"
+    except Exception as _exc:
+        logger.error(
+            "Failed to initialize any password hashing backend.",
+            extra={"component": "security", "exc_type": _exc.__class__.__name__},
+        )
+        raise RuntimeError("No usable password hashing backend found.") from _exc
+
+
+# Initialize single-scheme context and scheme name at import time
+PWD_CONTEXT: Final[CryptContext]
+ACTIVE_SCHEME: Final[str]
+PWD_CONTEXT, ACTIVE_SCHEME = _build_pwd_context()
+
+# Construct a tuple of passlib exceptions we handle explicitly
+_PASSLIB_ERRORS: tuple[type[BaseException], ...] = tuple(
     t
     for t in (
         getattr(passlib_exc, "PasswordSizeError", None),
@@ -90,11 +116,7 @@ _HASH_EXCEPTIONS: Tuple[type[BaseException], ...] = tuple(
 # PUBLIC_INTERFACE
 def hash_password(plain_password: str) -> str:
     """
-    Hash a plain text password using a secure algorithm.
-
-    Argon2 is used by default for new hashes. If Argon2 hashing fails due to a missing
-    backend or runtime constraints (e.g., very long password raising PasswordSizeError),
-    the function falls back to bcrypt_sha256 and then bcrypt.
+    Hash a plain text password using the active scheme (argon2 or bcrypt_sha256).
 
     Args:
         plain_password: The raw password to hash (must be a non-empty string).
@@ -103,60 +125,27 @@ def hash_password(plain_password: str) -> str:
         A secure hash string.
 
     Raises:
-        ValueError: If the provided password is invalid or hashing fails across all configured schemes.
+        ValueError: If the password is invalid or hashing fails.
     """
     if not isinstance(plain_password, str) or plain_password == "":
         raise ValueError("Password must be a non-empty string.")
 
-    # Try default scheme (first in 'schemes' list: argon2)
     try:
+        # With a single configured scheme, Passlib uses that scheme directly.
         return PWD_CONTEXT.hash(plain_password)
-    except _HASH_EXCEPTIONS as exc1:
-        # Log minimal diagnostics without PII
-        logger.warning(
-            "Primary password hashing failed; attempting fallbacks.",
-            extra={
-                "component": "security",
-                "primary_scheme": "argon2",
-                "argon2_available": _ARGON2_AVAILABLE,
-                "bcrypt_available": _BCRYPT_AVAILABLE,
-                "exc_type": exc1.__class__.__name__,
-            },
-        )
-        # Fallback to bcrypt_sha256 then bcrypt (raw)
-        for scheme in ("bcrypt_sha256", "bcrypt"):
-            try:
-                hashed = PWD_CONTEXT.hash(plain_password, scheme=scheme)
-                logger.info(
-                    "Password hashed using fallback scheme.",
-                    extra={"component": "security", "fallback_scheme": scheme},
-                )
-                return hashed
-            except _HASH_EXCEPTIONS as exc_next:
-                logger.warning(
-                    "Fallback hashing failed.",
-                    extra={
-                        "component": "security",
-                        "fallback_scheme": scheme,
-                        "exc_type": exc_next.__class__.__name__,
-                    },
-                )
-                continue
-
-        # All attempts failed: surface a controlled validation error
-        raise ValueError("Password hashing failed.") from exc1
+    except _PASSLIB_ERRORS as exc:
+        # Raise a controlled validation error without leaking backend details
+        raise ValueError("Password hashing failed.") from exc
 
 
 # PUBLIC_INTERFACE
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
-    Verify a plain text password against a stored hash.
-
-    This uses the unified CryptContext which auto-detects the hash's scheme.
+    Verify a plain text password against a stored hash using the active scheme.
 
     Args:
         plain_password: The raw password to verify.
-        hashed_password: The stored hash (argon2, bcrypt_sha256, or bcrypt).
+        hashed_password: The stored hash (must have been produced by ACTIVE_SCHEME).
 
     Returns:
         True if the password matches; False otherwise.
@@ -167,6 +156,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
     try:
         return PWD_CONTEXT.verify(plain_password, hashed_password)
-    except _HASH_EXCEPTIONS:
+    except _PASSLIB_ERRORS:
         # Unknown scheme, missing backend, or handler issues -> treat as mismatch
         return False
