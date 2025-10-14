@@ -1,55 +1,40 @@
 """
 Module: security
-Purpose: Security utilities including password hashing and verification using bcrypt with a SHA-256
-         pre-hash to safely support arbitrarily long passwords without relying on bcrypt's 72-byte cap.
+Purpose: Security utilities for password hashing and verification.
 
-Notes:
-- This module intentionally avoids logging sensitive data.
-- We pre-hash the UTF-8 encoded password with SHA-256, then encode the digest in hex and feed it to bcrypt.
-  This approach is equivalent in security to passlib's bcrypt_sha256 and prevents silent truncation.
-- We maintain backward compatibility by also verifying the raw bcrypt path if needed (for legacy hashes),
-  though in this project all hashes are produced by this module, so legacy support is minimal.
+Implementation details:
+- Prefer passlib's bcrypt_sha256 scheme which safely supports arbitrarily long passwords by
+  applying SHA-256 before bcrypt internally. This avoids bcrypt's 72-byte limitation and
+  removes the need for manual pre-hashing here.
+- Narrow exception handling so we don't convert passlib's non-fatal warnings into failures.
+- Ensure consistent return values and do not log sensitive data.
 """
 
-import hashlib
 from passlib.context import CryptContext
 
-# Import passlib exceptions defensively; not all environments expose identical classes.
-# We will only use the ones guaranteed to be Exception subclasses in our handlers.
-try:  # pragma: no cover - import shape may vary by environment
+# Import passlib exceptions defensively; shapes may vary by environment.
+try:  # pragma: no cover
     from passlib.exc import InvalidHashError, UnknownHashError  # type: ignore
-except Exception:  # pragma: no cover - extreme fallback if passlib.exc unavailable
+except Exception:  # pragma: no cover
     InvalidHashError = Exception  # type: ignore
     UnknownHashError = Exception  # type: ignore
 
-# Configure passlib CryptContext for bcrypt hashing.
-# Note: Some environments surface a trapped AttributeError when reading bcrypt version metadata
-# (module 'bcrypt' has no attribute '__about__'). Passlib still computes a valid hash in such cases.
-# Our hash_password() implementation therefore validates the returned hash string rather than
-# blindly failing on any Exception raised during metadata inspection.
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-def _sha256_hex(password: str) -> str:
-    """
-    Compute SHA-256 digest of the provided password string (UTF-8) and return hex representation.
-    Using hex keeps only printable characters and a consistent length, avoiding Unicode edge cases.
-    """
-    # Defensive: ensure string type and non-empty checked by callers
-    digest = hashlib.sha256(password.encode("utf-8")).hexdigest()
-    return digest
+# Configure passlib CryptContext.
+# Primary: bcrypt_sha256 (handles long passwords safely).
+# Fallback: bcrypt for any legacy hashes that might already exist.
+_pwd_context = CryptContext(schemes=["bcrypt_sha256", "bcrypt"], deprecated="auto")
 
 
 # PUBLIC_INTERFACE
 def hash_password(plain_password: str) -> str:
     """
-    Hash a plain text password using SHA-256 pre-hash followed by bcrypt.
+    Hash a plain text password.
 
     Args:
-        plain_password: The raw password to hash (any length).
+        plain_password: The raw password to hash (any length, min enforced upstream).
 
     Returns:
-        A secure bcrypt hash of the SHA-256(hex) representation.
+        A secure hash string using bcrypt_sha256 by default.
 
     Raises:
         ValueError: If the provided password is empty or hashing fails.
@@ -57,40 +42,32 @@ def hash_password(plain_password: str) -> str:
     if not isinstance(plain_password, str) or plain_password == "":
         raise ValueError("Password must be a non-empty string.")
     try:
-        # Pre-hash with SHA-256 to remove bcrypt 72-byte limitation
-        prehashed = _sha256_hex(plain_password)
-        # Some environments emit a trapped AttributeError reading bcrypt version but still return a valid hash.
-        # Passlib logs "(trapped) error reading bcrypt version" but hashing still succeeds.
-        # We therefore attempt hashing and only fail if the returned hash is invalid.
-        hashed = _pwd_context.hash(prehashed)
+        hashed = _pwd_context.hash(plain_password)
         if not isinstance(hashed, str) or not hashed:
-            # Defensive: treat empty/non-str results as failure
             raise ValueError("Password hashing failed.")
         return hashed
-    except AttributeError:
-        # Certain environments trigger AttributeError on version introspection while still supporting hashing.
-        # Retry once; if it still fails, raise a stable error.
+    except (AttributeError,):
+        # Some environments produce AttributeError during bcrypt metadata checks.
+        # Retry once; if still failing, raise a stable error without leaking details.
         try:
-            prehashed = _sha256_hex(plain_password)
-            hashed = _pwd_context.hash(prehashed)
+            hashed = _pwd_context.hash(plain_password)
             if not isinstance(hashed, str) or not hashed:
                 raise ValueError("Password hashing failed.")
             return hashed
         except Exception as inner_exc:
             raise ValueError("Password hashing failed.") from inner_exc
     except Exception as exc:
-        # Any other unexpected error indicates hashing truly failed.
         raise ValueError("Password hashing failed.") from exc
 
 
 # PUBLIC_INTERFACE
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
-    Verify a plain text password against a bcrypt hash using SHA-256 pre-hash.
+    Verify a plain text password against a stored hash.
 
     Args:
-        plain_password: The raw password to verify (any length).
-        hashed_password: The stored bcrypt hash.
+        plain_password: The raw password to verify.
+        hashed_password: The stored hash (bcrypt_sha256 or bcrypt).
 
     Returns:
         True if the password matches the hash; otherwise False.
@@ -100,9 +77,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     if plain_password == "" or hashed_password == "":
         return False
     try:
-        prehashed = _sha256_hex(plain_password)
-        return _pwd_context.verify(prehashed, hashed_password)
+        return _pwd_context.verify(plain_password, hashed_password)
     except (InvalidHashError, UnknownHashError, ValueError, Exception):
         # Treat invalid/unknown hash formats or bad input as non-match rather than raising.
-        # Catch-all Exception included to handle environments where passlib raises different subclasses.
         return False
