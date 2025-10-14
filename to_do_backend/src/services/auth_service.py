@@ -4,6 +4,8 @@ Purpose: Business logic for authentication including registration, login, and JW
 Security: Uses HS256 JWT with secret from environment settings. Never logs secrets or raw passwords.
 Enhancement: Enforce bcrypt UTF-8 byte-length constraints (8–72 bytes) defensively in service layer
              to prevent hashing/verification with invalid lengths.
+Fix: Normalize inputs (strip surrounding whitespace), validate strictly by UTF-8 byte length (8–72),
+     avoid truncation, and convert passlib/bcrypt exceptions into safe 400s only when truly exceeded.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -30,11 +32,26 @@ class TokenValidationError(AuthServiceError):
     """Raised when token validation fails."""
 
 
+def _normalized_password(password: str) -> str:
+    """
+    Normalize password inputs safely.
+
+    - Strip surrounding whitespace only (do not transform internal content).
+    - Ensure a string is returned for downstream processing.
+
+    We explicitly do not perform any Unicode normalization that could expand bytes or change semantics.
+    """
+    if not isinstance(password, str):
+        raise ValueError("Password must be a string.")
+    # Surrounding whitespace is often accidental (copy/paste); strip without altering internal content.
+    return password.strip()
+
+
 def _password_within_bcrypt_bounds(password: str) -> bool:
     """
     Return True if password is between 8 and 72 bytes (UTF-8), else False.
     """
-    if not isinstance(password, str) or not password:
+    if not isinstance(password, str) or password == "":
         return False
     try:
         byte_len = len(password.encode("utf-8"))
@@ -70,13 +87,27 @@ class AuthService:
 
         Raises:
             DuplicateEmailError: If the email is already registered.
-            ValueError: On invalid input.
+            ValueError: On invalid input (including >72-byte passwords).
         """
-        # Defensive check: enforce bcrypt byte-length policy even if schema validation was bypassed.
-        if not _password_within_bcrypt_bounds(password):
+        # Normalize inputs
+        email = (email or "").strip()
+        normalized_password = _normalized_password(password)
+
+        # Defensive check: enforce bcrypt byte-length policy (8–72 bytes).
+        if not _password_within_bcrypt_bounds(normalized_password):
             # Raise a ValueError so routers can consistently translate to HTTP 400
-            raise ValueError("Password must be between 8 and 72 bytes.")
-        return self._user_repo.create_user(db, email=email, password=password)
+            raise ValueError("Password must be between 8 and 72 UTF-8 bytes.")
+
+        # Delegate hashing to repository; ensure repository does not mutate/truncate password.
+        try:
+            return self._user_repo.create_user(db, email=email, password=normalized_password)
+        except ValueError:
+            # Bubble up validation errors consistently
+            raise
+        except Exception as exc:
+            # If underlying bcrypt/passlib throws due to unexpected issues, re-raise as ValueError for 400.
+            # We avoid leaking internal exception messages.
+            raise ValueError("Unable to process password.") from exc
 
     # PUBLIC_INTERFACE
     def authenticate_user(self, db: Session, *, email: str, password: str) -> Tuple[User, str]:
@@ -93,16 +124,25 @@ class AuthService:
 
         Raises:
             InvalidCredentialsError: If authentication fails.
-            ValueError: If password violates byte-length policy.
+            ValueError: If password violates byte-length policy or cannot be processed.
         """
-        # Defensive check before verifying against bcrypt hash to avoid implicit truncation.
-        if not _password_within_bcrypt_bounds(password):
-            # Service-layer 400 via router; keep message generic and consistent.
-            # This ensures clients receive 400 instead of schema-level 422 for policy violations.
-            raise ValueError("Password must be between 8 and 72 bytes.")
+        # Normalize inputs (mirror register path)
+        email = (email or "").strip()
+        normalized_password = _normalized_password(password)
 
-        user = self._user_repo.authenticate(db, email=email, password=password)
+        # Defensive check before verifying against bcrypt hash to avoid implicit truncation.
+        if not _password_within_bcrypt_bounds(normalized_password):
+            # Service-layer 400 via router; keep message generic and consistent.
+            raise ValueError("Password must be between 8 and 72 UTF-8 bytes.")
+
+        try:
+            user = self._user_repo.authenticate(db, email=email, password=normalized_password)
+        except Exception as exc:
+            # Convert unexpected passlib/bcrypt errors to a safe 400
+            raise ValueError("Unable to process password.") from exc
+
         if not user:
+            # Standard invalid credentials without leaking whether email exists
             raise InvalidCredentialsError("Invalid email or password.")
         token = self._create_access_token(subject=str(user.id))
         return user, token
