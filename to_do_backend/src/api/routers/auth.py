@@ -96,7 +96,7 @@ def login(
     except InvalidCredentialsError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
     except ValueError as exc:
-        # Enforce consistent 400 behavior for byte-length policy violations
+        # Enforce consistent 400 behavior (service enforces 8–72 UTF-8 byte policy)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 

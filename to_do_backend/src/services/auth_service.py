@@ -98,6 +98,7 @@ class AuthService:
         # Defensive check before verifying against bcrypt hash to avoid implicit truncation.
         if not _password_within_bcrypt_bounds(password):
             # Service-layer 400 via router; keep message generic and consistent.
+            # This ensures clients receive 400 instead of schema-level 422 for policy violations.
             raise ValueError("Password must be between 8 and 72 bytes.")
 
         user = self._user_repo.authenticate(db, email=email, password=password)
