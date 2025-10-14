@@ -23,6 +23,10 @@ except Exception:  # pragma: no cover - extreme fallback if passlib.exc unavaila
     UnknownHashError = Exception  # type: ignore
 
 # Configure passlib CryptContext for bcrypt hashing.
+# Note: Some environments surface a trapped AttributeError when reading bcrypt version metadata
+# (module 'bcrypt' has no attribute '__about__'). Passlib still computes a valid hash in such cases.
+# Our hash_password() implementation therefore validates the returned hash string rather than
+# blindly failing on any Exception raised during metadata inspection.
 _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
@@ -55,10 +59,15 @@ def hash_password(plain_password: str) -> str:
     try:
         # Pre-hash with SHA-256 to remove bcrypt 72-byte limitation
         prehashed = _sha256_hex(plain_password)
-        return _pwd_context.hash(prehashed)
+        # Some environments emit a trapped AttributeError reading bcrypt version but still return a valid hash.
+        hashed = _pwd_context.hash(prehashed)
+        # Ensure we actually received a string hash; otherwise treat as failure.
+        if not isinstance(hashed, str) or not hashed:
+            raise ValueError("Password hashing failed.")
+        return hashed
     except Exception as exc:
-        # Wrap and re-raise as a precise ValueError for service/routers without leaking internals.
-        # Use a deterministic message for client-facing consistency.
+        # Passlib/bcrypt may raise non-fatal warnings internally but still succeed.
+        # If we end up here, hashing genuinely failed; raise a stable public message.
         raise ValueError("Password hashing failed.") from exc
 
 
