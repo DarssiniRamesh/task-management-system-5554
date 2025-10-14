@@ -82,7 +82,8 @@ def test_string_6_chars_fails(db: Session):
     pwd = "string"  # 6 bytes
     with pytest.raises(ValueError) as excinfo:
         service.register_user(db, email=email, password=pwd)
-    assert "8 and 72" in str(excinfo.value)
+    # Policy now enforces only a minimum of 8 characters (no 72-byte max).
+    assert "8" in str(excinfo.value)
 
 
 def test_password_12_chars_passes(db: Session):
