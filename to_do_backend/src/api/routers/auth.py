@@ -12,7 +12,7 @@ from src.db.session import get_db
 from src.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
 from src.services.auth_service import AuthService, InvalidCredentialsError
 from src.db.repositories import DuplicateEmailError
-from src.dependencies.auth import get_current_user_id
+from src.dependencies.auth import get_current_user_id, get_auth_service
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -32,7 +32,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 def register_user(
     payload: RegisterRequest,
     db: Annotated[Session, Depends(get_db)],
-    auth_service: Annotated[AuthService, Depends(AuthService)],
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
 ):
     """
     Register a new user.

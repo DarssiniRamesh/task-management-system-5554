@@ -10,13 +10,26 @@ from sqlalchemy.orm import Session
 
 from src.db.session import get_db
 from src.services.auth_service import AuthService, TokenValidationError
+from src.db.repositories import UserRepository
+
+
+# PUBLIC_INTERFACE
+def get_auth_service(
+    user_repo: Annotated[UserRepository, Depends(lambda: UserRepository())]
+) -> AuthService:
+    """
+    Provide an AuthService instance via dependency injection without exposing Optional[UserRepository]
+    in function signatures that FastAPI would try to model as response fields.
+    """
+    # Construct AuthService with the injected repository instance
+    return AuthService(user_repository=user_repo)
 
 
 # PUBLIC_INTERFACE
 def get_current_user_id(
     request: Request,
     db: Annotated[Session, Depends(get_db)],
-    auth_service: Annotated[AuthService, Depends(AuthService)],
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
 ) -> int:
     """
     Extract Bearer token from Authorization header, validate it, and return the user id.
