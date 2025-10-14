@@ -154,8 +154,9 @@ class AuthService:
         try:
             user = self._user_repo.authenticate(db, email=email, password=normalized_pwd)
         except ValueError as exc:
-            # Preserve validation messages (though repository authenticate shouldn't raise in normal flow)
-            raise ValueError(str(exc) or "Invalid input.") from exc
+            # Preserve validation messages without falling back to a generic string.
+            # This ensures clients receive precise validation reasons.
+            raise ValueError((str(exc) or "").strip()) from exc
         # Do not catch-all here; let unexpected exceptions propagate to avoid masking valid inputs
 
         if not user:
