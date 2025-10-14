@@ -105,12 +105,14 @@ class AuthService:
         # Delegate hashing to repository; ensure repository does not mutate/truncate password.
         try:
             return self._user_repo.create_user(db, email=email, password=normalized_password)
-        except ValueError:
-            # Bubble up validation errors consistently
-            raise
+        except ValueError as exc:
+            # Preserve explicit validation messages (e.g., from repository or hashing)
+            # If hashing failed, surface a precise message; otherwise, bubble up.
+            msg = str(exc) if str(exc) else "Invalid input."
+            raise ValueError(msg) from exc
         except Exception as exc:
-            # Only map unexpected passlib/bcrypt issues; don't mask generic logic errors.
-            raise ValueError("Unable to process password.") from exc
+            # Only map truly unexpected issues to a safe message without masking policy-valid inputs.
+            raise ValueError("Password processing encountered an unexpected error.") from exc
 
     # PUBLIC_INTERFACE
     def authenticate_user(self, db: Session, *, email: str, password: str) -> Tuple[User, str]:
@@ -140,9 +142,12 @@ class AuthService:
 
         try:
             user = self._user_repo.authenticate(db, email=email, password=normalized_password)
+        except ValueError as exc:
+            # Preserve validation messages (though repository authenticate shouldn't raise in normal flow)
+            raise ValueError(str(exc) or "Invalid input.") from exc
         except Exception as exc:
-            # Convert unexpected passlib/bcrypt errors to a safe 400
-            raise ValueError("Unable to process password.") from exc
+            # Convert unexpected passlib/bcrypt errors to a safe 400 without ambiguous phrasing
+            raise ValueError("Password processing encountered an unexpected error.") from exc
 
         if not user:
             # Standard invalid credentials without leaking whether email exists

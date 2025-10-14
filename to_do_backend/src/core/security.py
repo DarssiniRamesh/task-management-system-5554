@@ -35,7 +35,7 @@ def hash_password(plain_password: str) -> str:
     try:
         return _pwd_context.hash(plain_password)
     except (ExpectedStringError, ValueError) as exc:
-        # Wrap and re-raise as generic ValueError for service/routers.
+        # Wrap and re-raise as a precise ValueError for service/routers.
         raise ValueError("Password hashing failed.") from exc
 
 
