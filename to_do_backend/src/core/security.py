@@ -9,7 +9,7 @@ Notes:
 """
 
 from passlib.context import CryptContext
-from passlib.exc import ExpectedStringError, InvalidHash
+from passlib.exc import ExpectedStringError, InvalidHashError
 
 # Configure passlib CryptContext for bcrypt hashing.
 _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -56,6 +56,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
     try:
         return _pwd_context.verify(plain_password, hashed_password)
-    except (InvalidHash, ExpectedStringError, ValueError):
+    except (InvalidHashError, ExpectedStringError, ValueError):
         # Treat invalid hash formats or bad input as non-match rather than raising
         return False
