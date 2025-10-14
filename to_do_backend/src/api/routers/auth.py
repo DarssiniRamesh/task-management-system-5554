@@ -29,6 +29,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
         409: {"description": "Email already exists."},
     },
 )
+# PUBLIC_INTERFACE
 def register_user(
     payload: RegisterRequest,
     db: Annotated[Session, Depends(get_db)],
@@ -68,6 +69,7 @@ def register_user(
         401: {"description": "Invalid credentials."},
     },
 )
+# PUBLIC_INTERFACE
 def login(
     payload: LoginRequest,
     db: Annotated[Session, Depends(get_db)],
@@ -101,10 +103,11 @@ def login(
     description="Returns current user details when provided a valid Bearer token.",
     responses={200: {"description": "User info returned."}, 401: {"description": "Unauthorized."}},
 )
+# PUBLIC_INTERFACE
 def get_me(
     user_id: Annotated[int, Depends(get_current_user_id)],
     db: Annotated[Session, Depends(get_db)],
-    auth_service: Annotated[AuthService, Depends(AuthService)],
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
 ):
     """
     Get the current authenticated user's profile.

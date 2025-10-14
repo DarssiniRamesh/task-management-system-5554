@@ -28,6 +28,7 @@ router = APIRouter(prefix="/tasks", tags=["Tasks"])
     summary="List tasks (paginated)",
     description="Returns a paginated list of tasks belonging to the authenticated user.",
 )
+# PUBLIC_INTERFACE
 def list_tasks(
     user_id: Annotated[int, Depends(get_current_user_id)],
     db: Annotated[Session, Depends(get_db)],
@@ -49,11 +50,12 @@ def list_tasks(
     description="Gets a task by id for the authenticated user.",
     responses={404: {"description": "Task not found."}},
 )
+# PUBLIC_INTERFACE
 def get_task(
     task_id: int,
     user_id: Annotated[int, Depends(get_current_user_id)],
     db: Annotated[Session, Depends(get_db)],
-    task_service: Annotated[TaskService, Depends(TaskService)],
+    task_service: Annotated[TaskService, Depends(get_task_service)],
 ):
     """
     Retrieve a single task by ID.
@@ -72,11 +74,12 @@ def get_task(
     summary="Create a task",
     description="Creates a new task for the authenticated user.",
 )
+# PUBLIC_INTERFACE
 def create_task(
     payload: TaskCreateRequest,
     user_id: Annotated[int, Depends(get_current_user_id)],
     db: Annotated[Session, Depends(get_db)],
-    task_service: Annotated[TaskService, Depends(TaskService)],
+    task_service: Annotated[TaskService, Depends(get_task_service)],
 ):
     """
     Create a new task.
@@ -92,12 +95,13 @@ def create_task(
     description="Updates an existing task for the authenticated user.",
     responses={404: {"description": "Task not found."}, 400: {"description": "Validation error."}},
 )
+# PUBLIC_INTERFACE
 def update_task(
     task_id: int,
     payload: TaskUpdateRequest,
     user_id: Annotated[int, Depends(get_current_user_id)],
     db: Annotated[Session, Depends(get_db)],
-    task_service: Annotated[TaskService, Depends(TaskService)],
+    task_service: Annotated[TaskService, Depends(get_task_service)],
 ):
     """
     Full update of a task.
@@ -125,11 +129,12 @@ def update_task(
     description="Toggles the completion status of a task or sets it explicitly if provided.",
     responses={404: {"description": "Task not found."}},
 )
+# PUBLIC_INTERFACE
 def toggle_task(
     task_id: int,
     user_id: Annotated[int, Depends(get_current_user_id)],
     db: Annotated[Session, Depends(get_db)],
-    task_service: Annotated[TaskService, Depends(TaskService)],
+    task_service: Annotated[TaskService, Depends(get_task_service)],
     payload: TaskToggleRequest | None = None,
 ):
     """
@@ -147,16 +152,18 @@ def toggle_task(
 
 @router.delete(
     "/{task_id}",
+    response_model=None,
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a task",
     description="Deletes a task owned by the authenticated user.",
     responses={404: {"description": "Task not found."}, 204: {"description": "Deleted."}},
 )
+# PUBLIC_INTERFACE
 def delete_task(
     task_id: int,
     user_id: Annotated[int, Depends(get_current_user_id)],
     db: Annotated[Session, Depends(get_db)],
-    task_service: Annotated[TaskService, Depends(TaskService)],
+    task_service: Annotated[TaskService, Depends(get_task_service)],
 ):
     """
     Delete a task.

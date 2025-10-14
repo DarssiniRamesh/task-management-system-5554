@@ -23,8 +23,8 @@ Backend API for the To Do application providing health, auth, and tasks CRUD.
    # - ACCESS_TOKEN_EXPIRE_MINUTES: token expiry time in minutes
    # - CORS_ALLOW_ORIGINS: frontend origin(s), e.g., http://localhost:3000
 
-3. Run the server:
-   uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+3. Run the server (port 3001):
+   uvicorn src.api.main:app --reload --host 0.0.0.0 --port 3001
 
 ## Environment Variables
 
@@ -39,27 +39,27 @@ Never hardcode or commit secrets. Always use environment variables.
 ## Smoke Test
 
 1. Health:
-   curl http://localhost:8000/
+   curl http://localhost:3001/
 
 2. Register:
-   curl -X POST http://localhost:8000/auth/register -H "Content-Type: application/json" -d '{"email":"user@example.com","password":"password123"}'
+   curl -X POST http://localhost:3001/auth/register -H "Content-Type: application/json" -d '{"email":"user@example.com","password":"password123"}'
 
 3. Login and get token:
-   TOKEN=$(curl -s -X POST http://localhost:8000/auth/login -H "Content-Type: application/json" -d '{"email":"user@example.com","password":"password123"}' | python -c "import sys, json; print(json.load(sys.stdin)['access_token'])")
+   TOKEN=$(curl -s -X POST http://localhost:3001/auth/login -H "Content-Type: application/json" -d '{"email":"user@example.com","password":"password123"}' | python -c "import sys, json; print(json.load(sys.stdin)['access_token'])")
 
 4. Get current user:
-   curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/auth/me
+   curl -H "Authorization: Bearer $TOKEN" http://localhost:3001/auth/me
 
 5. Create a task:
-   curl -X POST http://localhost:8000/tasks -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"title":"My first task","description":"Test task"}'
+   curl -X POST http://localhost:3001/tasks -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"title":"My first task","description":"Test task"}'
 
 ## OpenAPI
 
-- Interactive docs: http://localhost:8000/docs
-- OpenAPI JSON: http://localhost:8000/openapi.json
+- Interactive docs: http://localhost:3001/docs
+- OpenAPI JSON: http://localhost:3001/openapi.json
 
 To regenerate the interfaces/openapi.json file locally:
-   python -m src.api.generate_openapi
+   python -m src.api.generate_openAPI
 
 ## Notes
 

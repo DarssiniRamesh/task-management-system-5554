@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
+import uvicorn
 
 from src.api.routers.auth import router as auth_router
 from src.api.routers.tasks import router as tasks_router
@@ -61,7 +62,8 @@ def on_startup():
         raise
 
 
-@app.get("/", tags=["Health"], summary="Health Check")
+@app.get("/", tags=["Health"], summary="Health Check", response_model=None)
+# PUBLIC_INTERFACE
 def health_check():
     """
     Health check endpoint.
@@ -75,3 +77,10 @@ def health_check():
 # Include routers
 app.include_router(auth_router)
 app.include_router(tasks_router)
+
+
+if __name__ == "__main__":
+    # Run the app for local development using port 3001 as requested.
+    # In production, prefer starting via a process manager invoking:
+    #   uvicorn src.api.main:app --host 0.0.0.0 --port 3001
+    uvicorn.run(app, host="0.0.0.0", port=3001)
