@@ -16,9 +16,10 @@ Verification:
 from __future__ import annotations
 
 import logging
-from typing import Final
+from typing import Final, Tuple
 
 from passlib.context import CryptContext
+from passlib import exc as passlib_exc  # Use concrete exceptions; PasslibError is not present in 1.7.x
 
 # Configure module-level logger. In production prefer centralized structured logging.
 logger = logging.getLogger("to_do_backend.core.security")
@@ -65,13 +66,25 @@ PWD_CONTEXT: Final[CryptContext] = CryptContext(
     deprecated="auto",
 )
 
-# Import passlib exceptions defensively
-try:  # pragma: no cover
-    from passlib.exc import PasslibError  # type: ignore
-except Exception:  # pragma: no cover
-    class PasslibError(Exception):  # type: ignore
-        """Fallback base for passlib-related errors."""
-        pass
+# Build a robust tuple of passlib hashing/verification exceptions we want to handle for fallbacks.
+# Passlib 1.7.x exceptions do not share a single base like "PasslibError", so we compose a tuple.
+_HASH_EXCEPTIONS: Tuple[type[BaseException], ...] = tuple(
+    t
+    for t in (
+        getattr(passlib_exc, "PasswordSizeError", None),
+        getattr(passlib_exc, "PasswordValueError", None),
+        getattr(passlib_exc, "PasslibSecurityError", None),
+        getattr(passlib_exc, "MissingBackendError", None),
+        getattr(passlib_exc, "UnknownBackendError", None),
+        getattr(passlib_exc, "CryptBackendError", None),
+        getattr(passlib_exc, "InternalBackendError", None),
+        getattr(passlib_exc, "InvalidHashError", None),
+        getattr(passlib_exc, "MalformedHashError", None),
+        getattr(passlib_exc, "NullPasswordError", None),
+        getattr(passlib_exc, "PasswordTruncateError", None),
+    )
+    if t is not None
+) + (ValueError, RuntimeError)
 
 
 # PUBLIC_INTERFACE
@@ -80,7 +93,8 @@ def hash_password(plain_password: str) -> str:
     Hash a plain text password using a secure algorithm.
 
     Argon2 is used by default for new hashes. If Argon2 hashing fails due to a missing
-    backend or runtime constraints, the function falls back to bcrypt_sha256 and then bcrypt.
+    backend or runtime constraints (e.g., very long password raising PasswordSizeError),
+    the function falls back to bcrypt_sha256 and then bcrypt.
 
     Args:
         plain_password: The raw password to hash (must be a non-empty string).
@@ -97,7 +111,7 @@ def hash_password(plain_password: str) -> str:
     # Try default scheme (first in 'schemes' list: argon2)
     try:
         return PWD_CONTEXT.hash(plain_password)
-    except PasslibError as exc1:
+    except _HASH_EXCEPTIONS as exc1:
         # Log minimal diagnostics without PII
         logger.warning(
             "Primary password hashing failed; attempting fallbacks.",
@@ -118,7 +132,7 @@ def hash_password(plain_password: str) -> str:
                     extra={"component": "security", "fallback_scheme": scheme},
                 )
                 return hashed
-            except PasslibError as exc_next:
+            except _HASH_EXCEPTIONS as exc_next:
                 logger.warning(
                     "Fallback hashing failed.",
                     extra={
@@ -153,6 +167,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
     try:
         return PWD_CONTEXT.verify(plain_password, hashed_password)
-    except PasslibError:
-        # Unknown scheme or missing backend for the given hash -> treat as mismatch
+    except _HASH_EXCEPTIONS:
+        # Unknown scheme, missing backend, or handler issues -> treat as mismatch
         return False
