@@ -61,7 +61,8 @@ class UserRepository:
             # Flush to execute INSERT, ensuring constraints checked and PK assigned.
             db.flush()
             # Refresh ensures server-side defaults (timestamps) are present on the instance.
-            db.refresh(user)
+            # Explicitly refresh key attributes to guarantee they are populated pre-commit (SQLite-safe).
+            db.refresh(user, attribute_names=["id", "email", "created_at", "updated_at", "hashed_password"])
         except IntegrityError as exc:
             # Roll back the transaction before surfacing a conflict error.
             db.rollback()

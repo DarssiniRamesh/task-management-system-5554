@@ -69,7 +69,14 @@ def register_user(
         # any ResponseValidationError due to ORM conversion edge cases.
         # Return a plain dict derived from the validated model to guarantee serialization.
         # Note: model_validate supports from_attributes when model Config has from_attributes=True.
-        return UserResponse.model_validate(user).model_dump()
+        # Build a safe, JSON-serializable dict after validation to avoid response model issues.
+        model = UserResponse.model_validate(user)
+        data = model.model_dump()
+        # Ensure datetimes are strings (safety for any custom JSON encoders).
+        if hasattr(model, "created_at") and hasattr(model, "updated_at"):
+            data["created_at"] = model.created_at.isoformat()
+            data["updated_at"] = model.updated_at.isoformat()
+        return data
     except DuplicateEmailError as exc:
         # 409 Conflict for duplicate emails (unique constraint violation)
         logger.warning("Duplicate email on registration", extra={"op": "auth_register", "email": payload.email})
@@ -198,4 +205,9 @@ def get_me(
         # Token valid but user not found (deleted account)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found.")
     # Return a plain dict to ensure consistent JSON serialization.
-    return UserResponse.model_validate(user).model_dump()
+    model = UserResponse.model_validate(user)
+    data = model.model_dump()
+    if hasattr(model, "created_at") and hasattr(model, "updated_at"):
+        data["created_at"] = model.created_at.isoformat()
+        data["updated_at"] = model.updated_at.isoformat()
+    return data
