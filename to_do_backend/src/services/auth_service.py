@@ -119,8 +119,10 @@ class AuthService:
         try:
             return self._user_repo.create_user(db, email=email, password=normalized_pwd)
         except ValueError as exc:
-            # Preserve explicit validation messages (e.g., from repository or hashing)
-            msg = str(exc) if str(exc) else "Invalid input."
+            # Preserve explicit validation messages (e.g., from repository or hashing).
+            # If no message was given, fall back to a clear policy message since most ValueErrors
+            # here relate to validation rather than system faults.
+            msg = (str(exc) or "").strip() or POLICY_MESSAGE
             raise ValueError(msg) from exc
         # Do not catch-all here; let unexpected exceptions propagate to avoid masking valid inputs
 

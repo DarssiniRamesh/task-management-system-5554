@@ -59,15 +59,15 @@ def register_user(
         # 409 Conflict for duplicate emails (unique constraint violation)
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except RepositoryError as exc:
-        # Controlled repository-layer error; surface details as provided.
-        detail = str(exc) or "Repository error."
+        # Controlled repository-layer error; surface details as provided without masking.
+        detail = str(exc).strip() or "Repository error."
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
     except ValueError as exc:
-        # Map service-layer policy violations and hashing/processing errors to 400 with precise detail.
-        # Ensure we always include the minimum length message when applicable.
-        msg = str(exc).strip() or POLICY_MESSAGE
-        if "8" not in msg and "at least" not in msg.lower():
-            # Prefer consistent policy text for password-related ValueErrors
+        # Preserve the actual validation message from the service/repository.
+        # If the message clearly indicates the password policy, keep it; otherwise pass through as-is.
+        msg = (str(exc) or "").strip()
+        if not msg:
+            # If no message was provided, fall back to the policy message only for password-related issues.
             msg = POLICY_MESSAGE
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg) from exc
     except HTTPException:
@@ -117,11 +117,12 @@ def login(
         # 401 Unauthorized for bad credentials without leaking specifics
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
     except RepositoryError as exc:
-        # Repository errors in login are treated as invalid inputs (do not leak internals)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc) or "Invalid input.") from exc
+        # Repository errors in login: surface the message (do not leak internals beyond controlled msg)
+        detail = (str(exc) or "").strip() or "Repository error."
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
     except ValueError as exc:
-        # Enforce consistent 400 behavior (service enforces >=8 characters policy)
-        detail = str(exc) or POLICY_MESSAGE
+        # Enforce consistent 400 behavior while preserving precise messages
+        detail = (str(exc) or "").strip() or POLICY_MESSAGE
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
     except HTTPException:
         # Allow previously raised HTTP errors to propagate
