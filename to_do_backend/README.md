@@ -39,11 +39,13 @@ Backend API for the To Do application providing health, auth, and tasks CRUD.
 
 Never hardcode or commit secrets. Always use environment variables.
 
-## CORS and Logging
+## CORS and Connectivity
 
-- CORS is configured via CORS_ALLOW_ORIGINS (comma-separated). Defaults to permissive in dev.
-- Structured JSON logging is enabled with safe context only (no PII). Centralized exception handlers
-  return safe messages for validation and server errors.
+- Set CORS_ALLOW_ORIGINS to include your frontend origin (comma-separated). For local dev:
+  CORS_ALLOW_ORIGINS=http://localhost:3000
+- Verify connectivity:
+  - Visit http://localhost:3001/docs to confirm backend is running
+  - From the frontend (http://localhost:3000), a fetch to http://localhost:3001/ should succeed without CORS errors
 
 ## Database options and behavior
 
@@ -91,7 +93,7 @@ Notes:
 - Do not run create_all in production; rely on `alembic upgrade head`.
 - Keep models authoritative; indices/constraints are defined in src/db/models.py.
 
-## Smoke Test
+## End-to-End Smoke Test
 
 1. Health:
    curl http://localhost:3001/
@@ -107,6 +109,18 @@ Notes:
 
 5. Create a task:
    curl -X POST http://localhost:3001/tasks -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"title":"My first task","description":"Test task"}'
+
+6. List tasks:
+   curl -H "Authorization: Bearer $TOKEN" http://localhost:3001/tasks
+
+7. Update task (replace ID):
+   curl -X PUT http://localhost:3001/tasks/1 -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"title":"Updated","description":"Updated","is_completed":false}'
+
+8. Toggle task:
+   curl -X PATCH http://localhost:3001/tasks/1/toggle -H "Authorization: Bearer $TOKEN"
+
+9. Delete task:
+   curl -X DELETE http://localhost:3001/tasks/1 -H "Authorization: Bearer $TOKEN"
 
 ## OpenAPI
 
