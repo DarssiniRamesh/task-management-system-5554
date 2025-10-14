@@ -13,6 +13,7 @@ from collections.abc import Generator
 from typing import Optional
 
 from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import declarative_base, scoped_session, sessionmaker
 
 from src.core.config import get_settings
@@ -25,16 +26,28 @@ SessionLocal: Optional[scoped_session] = None
 
 
 def _create_engine_from_settings():
-    """Create SQLAlchemy engine based on settings with SQLite handling."""
+    """
+    Create SQLAlchemy engine based on settings with SQLite handling.
+
+    Special-case in-memory SQLite databases to use a StaticPool so the same
+    connection is reused across the application. Without this, each new
+    connection would get a fresh, empty in-memory database and tests would
+    observe "no such table" errors after metadata creation.
+    """
     settings = get_settings()
     database_url = settings.database_url
 
-    # SQLite needs special connect args
-    connect_args = {}
-    if database_url.startswith("sqlite"):
-        connect_args = {"check_same_thread": False}
+    # Base engine kwargs
+    engine_kwargs = {"pool_pre_ping": True}
 
-    engine = create_engine(database_url, connect_args=connect_args, pool_pre_ping=True)
+    # SQLite needs special connect args
+    if database_url.startswith("sqlite"):
+        engine_kwargs["connect_args"] = {"check_same_thread": False}
+        # Detect in-memory SQLite URLs and pin to StaticPool for shared state
+        if database_url in ("sqlite://", "sqlite:///:memory:") or database_url.endswith(":memory:"):
+            engine_kwargs["poolclass"] = StaticPool
+
+    engine = create_engine(database_url, **engine_kwargs)
     return engine
 
 

@@ -92,7 +92,15 @@ except Exception as _argon2_exc:
 
 # Configure passlib CryptContexts.
 # Primary: bcrypt_sha256 (handles long passwords safely) - no manual prehashing here.
-_PRIMARY_CONTEXT = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
+# Increase max_password_size to accept very long inputs (policy: only min length of 8 enforced at service layer).
+# Note: passlib will still protect memory/transforms; we avoid 72-byte truncation by using bcrypt_sha256.
+_PRIMARY_CONTEXT = CryptContext(
+    schemes=["bcrypt_sha256"],
+    deprecated="auto",
+    # Accept passwords significantly longer than default (4096), covering our tests and typical needs.
+    # Using a high integer to avoid None compatibility differences across passlib versions.
+    bcrypt_sha256__max_password_size=10_000_000,
+)
 
 # Secondary contexts used only for verification / fallback hashing.
 # Note: constructing these contexts does not guarantee runtime availability; Passlib will raise
