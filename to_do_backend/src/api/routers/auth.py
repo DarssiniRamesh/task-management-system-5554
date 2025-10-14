@@ -196,4 +196,5 @@ def get_me(
     if not user:
         # Token valid but user not found (deleted account)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found.")
-    return UserResponse.model_validate(user)
+    # Return a plain dict to ensure consistent JSON serialization.
+    return UserResponse.model_validate(user).model_dump()
