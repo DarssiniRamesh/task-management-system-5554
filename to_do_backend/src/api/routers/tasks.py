@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from src.db.session import get_db
 from src.dependencies.auth import get_current_user_id
+from src.dependencies.task import get_task_service
 from src.schemas.task import (
     TaskCreateRequest,
     TaskResponse,
@@ -30,7 +31,7 @@ router = APIRouter(prefix="/tasks", tags=["Tasks"])
 def list_tasks(
     user_id: Annotated[int, Depends(get_current_user_id)],
     db: Annotated[Session, Depends(get_db)],
-    task_service: Annotated[TaskService, Depends(TaskService)],
+    task_service: Annotated[TaskService, Depends(get_task_service)],
     skip: int = Query(0, ge=0, description="Number of items to skip."),
     limit: int = Query(50, ge=1, le=100, description="Maximum number of items to return."),
 ):

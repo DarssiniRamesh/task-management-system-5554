@@ -14,15 +14,16 @@ from src.db.repositories import UserRepository
 
 
 # PUBLIC_INTERFACE
-def get_auth_service(
-    user_repo: Annotated[UserRepository, Depends(lambda: UserRepository())]
-) -> AuthService:
+def get_auth_service() -> AuthService:
     """
-    Provide an AuthService instance via dependency injection without exposing Optional[UserRepository]
-    in function signatures that FastAPI would try to model as response fields.
+    Provide an AuthService instance via dependency injection without exposing repository types
+    in the dependency signature. The service composes its repository internally.
+
+    Returns:
+        AuthService: A ready-to-use authentication service instance.
     """
-    # Construct AuthService with the injected repository instance
-    return AuthService(user_repository=user_repo)
+    # Construct AuthService with a concrete repository instance without surfacing the type
+    return AuthService(user_repository=UserRepository())
 
 
 # PUBLIC_INTERFACE

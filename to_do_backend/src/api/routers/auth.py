@@ -71,7 +71,7 @@ def register_user(
 def login(
     payload: LoginRequest,
     db: Annotated[Session, Depends(get_db)],
-    auth_service: Annotated[AuthService, Depends(AuthService)],
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
 ):
     """
     Login user and get access token.
