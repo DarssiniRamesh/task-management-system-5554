@@ -68,6 +68,7 @@ def register_user(
         # Validate against the response model and return a JSON-serializable dict to avoid
         # any ResponseValidationError due to ORM conversion edge cases.
         # Return a plain dict derived from the validated model to guarantee serialization.
+        # Note: model_validate supports from_attributes when model Config has from_attributes=True.
         return UserResponse.model_validate(user).model_dump()
     except DuplicateEmailError as exc:
         # 409 Conflict for duplicate emails (unique constraint violation)

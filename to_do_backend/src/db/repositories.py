@@ -58,15 +58,13 @@ class UserRepository:
         user = User(email=email, hashed_password=hash_password(password))
         db.add(user)
         try:
-            # Flush pending INSERT so constraints are checked and PK is assigned
+            # Flush to execute INSERT, ensuring constraints checked and PK assigned.
             db.flush()
-            # Refresh the instance so server_default columns (created_at/updated_at) are loaded
-            # Some databases (e.g., SQLite with server_default func.now()) won't populate the
-            # ORM object's attributes until refresh/commit; refreshing ensures response models validate.
+            # Refresh ensures server-side defaults (timestamps) are present on the instance.
             db.refresh(user)
         except IntegrityError as exc:
+            # Roll back the transaction before surfacing a conflict error.
             db.rollback()
-            # Translate to domain-specific error without leaking internals
             raise DuplicateEmailError("Email already exists.") from exc
         return user
 
