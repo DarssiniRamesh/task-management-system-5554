@@ -33,7 +33,9 @@ class AuthService:
     AuthService encapsulates user registration, authentication, and JWT operations.
     """
 
-    def __init__(self, user_repository: Optional[UserRepository] = None):
+    def __init__(self, user_repository: object | None = None):
+        # Avoid exposing repository types in annotations to prevent FastAPI dependency analysis from
+        # attempting to resolve non-Pydantic classes. Composition is done internally.
         self._user_repo = user_repository or UserRepository()
         self._settings = get_settings()
 

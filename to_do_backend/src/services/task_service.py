@@ -18,7 +18,8 @@ class TaskNotFoundError(Exception):
 class TaskService:
     """Service layer for task operations with ownership enforcement."""
 
-    def __init__(self, task_repository: Optional[TaskRepository] = None):
+    def __init__(self, task_repository: object | None = None):
+        # Avoid exposing repository types in annotations to FastAPI DI analysis
         self._task_repo = task_repository or TaskRepository()
 
     # PUBLIC_INTERFACE
