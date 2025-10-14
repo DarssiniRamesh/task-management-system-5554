@@ -39,6 +39,12 @@ Backend API for the To Do application providing health, auth, and tasks CRUD.
 
 Never hardcode or commit secrets. Always use environment variables.
 
+## CORS and Logging
+
+- CORS is configured via CORS_ALLOW_ORIGINS (comma-separated). Defaults to permissive in dev.
+- Structured JSON logging is enabled with safe context only (no PII). Centralized exception handlers
+  return safe messages for validation and server errors.
+
 ## Database options and behavior
 
 - SQLite (local dev): When ENVIRONMENT=development or DATABASE_URL starts with sqlite,
