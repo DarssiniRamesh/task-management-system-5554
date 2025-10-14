@@ -6,6 +6,8 @@ Notes:
 - This module intentionally avoids logging sensitive data.
 - Only expected passlib/bcrypt exceptions are surfaced in a controlled way.
 - CryptContext is configured with the 'bcrypt' scheme specifically (not bcrypt_sha256).
+- Password policy (8–72 UTF-8 bytes, inclusive) is enforced in the AuthService layer prior to calling
+  these functions, to avoid accidental truncation and to ensure consistent HTTP 400 mapping at the router.
 """
 
 from passlib.context import CryptContext
