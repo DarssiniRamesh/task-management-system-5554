@@ -48,7 +48,10 @@ def using_inmemory_db():
 
 
 def _client():
-    # Helper to construct a fresh client
+    # Helper to construct a fresh client as a context manager so FastAPI startup/shutdown run.
+    # Usage:
+    #   with _client() as client:
+    #       ...
     return TestClient(app)
 
 
@@ -59,38 +62,38 @@ def _password_of_bytes(n: int) -> str:
 
 def test_register_with_valid_password_returns_201():
     with using_inmemory_db():
-        client = _client()
-        payload = {"email": "valid@example.com", "password": "Password123!"}
-        resp = client.post("/auth/register", json=payload)
-        assert resp.status_code == 201, resp.text
-        data = resp.json()
-        assert data["email"] == payload["email"]
-        assert "id" in data
+        with _client() as client:
+            payload = {"email": "valid@example.com", "password": "Password123!"}
+            resp = client.post("/auth/register", json=payload)
+            assert resp.status_code == 201, resp.text
+            data = resp.json()
+            assert data["email"] == payload["email"]
+            assert "id" in data
 
 
 def test_register_with_7_chars_returns_400():
     with using_inmemory_db():
-        client = _client()
-        payload = {"email": "short@example.com", "password": _password_of_bytes(7)}
-        resp = client.post("/auth/register", json=payload)
-        assert resp.status_code == 400
-        assert "8" in resp.json().get("detail", "")
+        with _client() as client:
+            payload = {"email": "short@example.com", "password": _password_of_bytes(7)}
+            resp = client.post("/auth/register", json=payload)
+            assert resp.status_code == 400
+            assert "8" in resp.json().get("detail", "")
 
 
 def test_register_with_1000_chars_returns_201():
     with using_inmemory_db():
-        client = _client()
-        payload = {"email": "long@example.com", "password": _password_of_bytes(1000)}
-        resp = client.post("/auth/register", json=payload)
-        assert resp.status_code == 201, resp.text
+        with _client() as client:
+            payload = {"email": "long@example.com", "password": _password_of_bytes(1000)}
+            resp = client.post("/auth/register", json=payload)
+            assert resp.status_code == 201, resp.text
 
 
 def test_register_duplicate_email_returns_409():
     with using_inmemory_db():
-        client = _client()
-        payload = {"email": "dup@example.com", "password": "Password123!"}
-        first = client.post("/auth/register", json=payload)
-        assert first.status_code == 201
-        second = client.post("/auth/register", json=payload)
-        assert second.status_code == 409
-        assert "exists" in second.json().get("detail", "").lower()
+        with _client() as client:
+            payload = {"email": "dup@example.com", "password": "Password123!"}
+            first = client.post("/auth/register", json=payload)
+            assert first.status_code == 201
+            second = client.post("/auth/register", json=payload)
+            assert second.status_code == 409
+            assert "exists" in second.json().get("detail", "").lower()
